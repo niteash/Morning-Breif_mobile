@@ -1,61 +1,50 @@
-<<<<<<< HEAD
-# Morning-Breif_mobile
-an automation agent for the news briefing
-=======
-# Welcome to your Expo app 👋
+# Morning Brief 📰🎧
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+> A Burmese-language AI morning briefing app that turns the most relevant daily news into a personalized audio briefing.
 
-## Get started
+Morning Brief is an Android-first mobile application designed for users who want to stay informed without spending a lot of time reading individual news articles.
 
-1. Install dependencies
+Users select the topics they care about, choose their preferred delivery time, and receive a personalized morning briefing containing the most relevant stories across their selected categories.
 
-   ```bash
-   npm install
-   ```
+The briefing is generated in Burmese using AI and converted into natural Burmese speech using Azure Neural TTS.
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+## ✨ Features
 
-In the output, you'll find options to open the app in a
+### 📰 Personalized News
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Users can select the categories they want to follow, such as:
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- 🌍 World
+- ⚽ Football
+- 💼 Business
+- 💻 Technology
+- 🇲🇲 Myanmar
 
-## Get a fresh project
+The backend retrieves and filters recent stories based on the user's selected categories.
 
-When you're ready, run:
+### 🤖 AI-Powered Briefing
 
-```bash
-npm run reset-project
-```
+Instead of simply displaying a list of articles, Morning Brief uses Gemini to transform selected news stories into a concise spoken briefing.
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+The AI:
 
-### Other setup steps
+- Selects important stories
+- Removes unnecessary repetition
+- Combines related stories
+- Summarizes information naturally
+- Generates Burmese-language narration
+- Avoids fabricating information
+- Keeps technical names and terms in English when appropriate
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### 🎙️ Burmese Neural TTS
 
-## Learn more
+The generated Burmese briefing is converted into speech using:
 
-To learn more about developing your project with Expo, look at the following resources:
+**Azure Speech Services**
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Current voice:
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
->>>>>>> 35aa43e (Initial commit)
+```text
+my-MM-NilarNeural
