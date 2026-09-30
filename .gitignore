@@ -1,0 +1,111 @@
+# =========================================================
+# Node / React Native / Expo
+# =========================================================
+
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Generated native folders
+/ios
+/android
+
+# Metro
+.metro-health-check*
+
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+pnpm-debug.*
+
+# TypeScript
+*.tsbuildinfo
+
+
+# =========================================================
+# Python / FastAPI
+# =========================================================
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+
+
+# =========================================================
+# Environment / Secrets
+# =========================================================
+
+.env
+.env.*
+!.env.example
+
+
+# =========================================================
+# Generated files
+# =========================================================
+
+*.mp3
+*.wav
+*.ogg
+*.m4a
+
+tmp/
+temp/
+
+
+# =========================================================
+# macOS
+# =========================================================
+
+.DS_Store
+
+
+# =========================================================
+# IDE
+# =========================================================
+
+.vscode/
+.idea/
+
+
+# =========================================================
+# Logs
+# =========================================================
+
+*.log
+
+# Environment / Secrets
+.env
+.env.*
+!.env.example
