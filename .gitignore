@@ -4,13 +4,12 @@
 
 node_modules/
 
-# Expo
 .expo/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Native build artifacts
 .kotlin/
 *.orig.*
 *.jks
@@ -19,14 +18,15 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
-# Generated native folders
-/ios
-/android
+# Generated native folders (only if using Expo Prebuild)
+# Keep these ignored if native projects are generated locally.
+/ios/
+/android/
 
 # Metro
 .metro-health-check*
 
-# Debug
+# Package manager / debug logs
 npm-debug.*
 yarn-debug.*
 yarn-error.*
@@ -55,6 +55,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
 
 # Coverage
 .coverage
@@ -63,16 +64,32 @@ htmlcov/
 
 
 # =========================================================
-# Environment / Secrets
+# Environment Variables / Secrets
 # =========================================================
 
 .env
 .env.*
 !.env.example
 
+# Firebase service-account credentials
+*firebase-adminsdk*.json
+firebase-service-account.json
+**/firebase-service-account.json
+**/service-account*.json
+
+# Firebase Android configuration
+google-services.json
+
+# Private keys and certificates
+*.pem
+*.p12
+*.pfx
+*.key
+*.mobileprovision
+
 
 # =========================================================
-# Generated files
+# Generated Audio / Temporary Files
 # =========================================================
 
 *.mp3
@@ -82,6 +99,7 @@ htmlcov/
 
 tmp/
 temp/
+.cache/
 
 
 # =========================================================
@@ -89,14 +107,19 @@ temp/
 # =========================================================
 
 .DS_Store
+.AppleDouble
+.LSOverride
 
 
 # =========================================================
-# IDE
+# IDE / Editor
 # =========================================================
 
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 
 # =========================================================
@@ -105,7 +128,31 @@ temp/
 
 *.log
 
-# Environment / Secrets
-.env
-.env.*
-!.env.example
+
+# =========================================================
+# Testing / Local Artifacts
+# =========================================================
+
+.nyc_output/
+coverage/
+playwright-report/
+test-results/
+
+
+# =========================================================
+# Local Database / Backup Files
+# =========================================================
+
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+*.dump
+
+
+# =========================================================
+# Build / Deployment Artifacts
+# =========================================================
+
+build/
+release/

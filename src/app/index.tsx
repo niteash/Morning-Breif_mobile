@@ -3,14 +3,13 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 
 import { ensureAuthenticated } from "../lib/auth";
-
+import { SafeAreaView } from "react-native-safe-area-context";
 export default function Index() {
   const [loading, setLoading] = useState(false);
 

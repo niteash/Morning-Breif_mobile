@@ -1,6 +1,10 @@
 import { supabase } from "./supabase";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL!;
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+if (!API_URL) {
+  console.error("EXPO_PUBLIC_API_URL is not configured");
+}
 
 export async function apiRequest(path: string, options: RequestInit = {}) {
   const {
@@ -11,42 +15,75 @@ export async function apiRequest(path: string, options: RequestInit = {}) {
     throw new Error("User is not authenticated");
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session.access_token}`,
-      ...(options.headers || {}),
-    },
-  });
+  const url = `${API_URL}${path}`;
 
-  const contentType = response.headers.get("content-type");
+  console.log("=================================");
 
-  const data = contentType?.includes("application/json")
-    ? await response.json()
-    : await response.text();
+  console.log("API REQUEST:");
 
-  if (!response.ok) {
-    console.error("API ERROR STATUS:", response.status);
-    console.error("API ERROR RESPONSE:", data);
+  console.log("URL:", url);
 
-    let message = `API request failed: ${response.status}`;
+  console.log("METHOD:", options.method || "GET");
 
-    if (typeof data === "object" && data !== null) {
-      if ("detail" in data) {
-        message =
-          typeof data.detail === "string"
-            ? data.detail
-            : JSON.stringify(data.detail);
-      } else {
-        message = JSON.stringify(data);
+  console.log("USER:", session.user.id);
+
+  console.log("=================================");
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+        ...(options.headers || {}),
+      },
+    });
+
+    console.log("API RESPONSE STATUS:", response.status);
+
+    const contentType = response.headers.get("content-type");
+
+    const data = contentType?.includes("application/json")
+      ? await response.json()
+      : await response.text();
+
+    if (!response.ok) {
+      console.error("API ERROR STATUS:", response.status);
+
+      console.error("API ERROR RESPONSE:", data);
+
+      let message = `API request failed: ${response.status}`;
+
+      if (typeof data === "object" && data !== null) {
+        if ("detail" in data) {
+          message =
+            typeof data.detail === "string"
+              ? data.detail
+              : JSON.stringify(data.detail);
+        } else {
+          message = JSON.stringify(data);
+        }
+      } else if (typeof data === "string" && data) {
+        message = data;
       }
-    } else if (typeof data === "string" && data) {
-      message = data;
+
+      throw new Error(message);
     }
 
-    throw new Error(message);
-  }
+    console.log("API REQUEST SUCCESS");
 
-  return data;
+    return data;
+  } catch (error) {
+    console.error("=================================");
+
+    console.error("API FETCH ERROR:");
+
+    console.error(error);
+
+    console.error("URL:", url);
+
+    console.error("=================================");
+
+    throw error;
+  }
 }

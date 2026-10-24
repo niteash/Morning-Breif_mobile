@@ -1,15 +1,18 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
+
 import { router, useLocalSearchParams } from "expo-router";
 
 import {
@@ -23,6 +26,7 @@ export default function DeliveryTimeScreen() {
   }>();
 
   console.log("DELIVERY TIME SCREEN MOUNTED");
+
   console.log("DELIVERY TIME CATEGORY PARAM:", categories);
 
   const [selectedTime, setSelectedTime] = useState(() => {
@@ -37,12 +41,17 @@ export default function DeliveryTimeScreen() {
   });
 
   const [showPicker, setShowPicker] = useState(false);
+
   const [saving, setSaving] = useState(false);
 
   const timezone = "Asia/Yangon";
 
   const categoryIds =
     typeof categories === "string" ? categories.split(",").filter(Boolean) : [];
+
+  // =========================================
+  // Mobile DateTimePicker
+  // =========================================
 
   function handleTimeChange(event: DateTimePickerEvent, selectedDate?: Date) {
     if (event.type === "dismissed") {
@@ -57,6 +66,10 @@ export default function DeliveryTimeScreen() {
     }
   }
 
+  // =========================================
+  // Format selected time
+  // =========================================
+
   function formatTime() {
     return selectedTime.toLocaleTimeString([], {
       hour: "2-digit",
@@ -65,8 +78,46 @@ export default function DeliveryTimeScreen() {
     });
   }
 
+  // =========================================
+  // Web time input
+  // =========================================
+
+  function handleWebTimeChange(value: string) {
+    if (!value) {
+      return;
+    }
+
+    const [hourString, minuteString] = value.split(":");
+
+    const hour = Number(hourString);
+    const minute = Number(minuteString);
+
+    if (!Number.isInteger(hour) || !Number.isInteger(minute)) {
+      return;
+    }
+
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return;
+    }
+
+    const newTime = new Date(selectedTime);
+
+    newTime.setHours(hour);
+    newTime.setMinutes(minute);
+    newTime.setSeconds(0);
+    newTime.setMilliseconds(0);
+
+    setSelectedTime(newTime);
+  }
+
+  // =========================================
+  // Save onboarding
+  // =========================================
+
   async function handleContinue() {
-    if (saving) return;
+    if (saving) {
+      return;
+    }
 
     try {
       setSaving(true);
@@ -76,9 +127,11 @@ export default function DeliveryTimeScreen() {
       }
 
       const deliveryHour = selectedTime.getHours();
+
       const deliveryMinute = selectedTime.getMinutes();
 
       console.log("CATEGORY PARAM:", categories);
+
       console.log("CATEGORY IDS:", categoryIds);
 
       console.log("DELIVERY TIME:", {
@@ -87,7 +140,10 @@ export default function DeliveryTimeScreen() {
         timezone,
       });
 
+      // =====================================
       // Save delivery time
+      // =====================================
+
       const preferencesResponse = await updateMyPreferences({
         timezone,
         delivery_hour: deliveryHour,
@@ -96,14 +152,20 @@ export default function DeliveryTimeScreen() {
 
       console.log("PREFERENCES SAVED THROUGH BACKEND:", preferencesResponse);
 
+      // =====================================
       // Save selected categories
+      // =====================================
+
       const categoriesResponse = await updateMyCategories(categoryIds);
 
       console.log("CATEGORIES SAVED THROUGH BACKEND:", categoriesResponse);
 
       console.log("ONBOARDING COMPLETED");
 
+      // =====================================
       // Go to Home
+      // =====================================
+
       router.replace("/home");
     } catch (error) {
       console.error("ONBOARDING SAVE ERROR:", error);
@@ -112,9 +174,22 @@ export default function DeliveryTimeScreen() {
     }
   }
 
+  // =========================================
+  // Web time value
+  // =========================================
+
+  const webTimeValue = `${String(selectedTime.getHours()).padStart(
+    2,
+    "0",
+  )}:${String(selectedTime.getMinutes()).padStart(2, "0")}`;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
+        {/* ================================= */}
+        {/* Title */}
+        {/* ================================= */}
+
         <Text style={styles.title}>
           ဘယ်အချိန်မှာ{"\n"}
           Morning Brief ရချင်လဲ?
@@ -124,19 +199,51 @@ export default function DeliveryTimeScreen() {
           မနက်တိုင်း သင်ရွေးချယ်ထားတဲ့ သတင်းတွေကို ဒီအချိန်မှာ ရရှိပါမယ်။
         </Text>
 
+        {/* ================================= */}
+        {/* Delivery Time */}
+        {/* ================================= */}
+
         <Pressable
           style={styles.timeCard}
-          onPress={() => setShowPicker(true)}
+          onPress={() => Platform.OS !== "web" && setShowPicker(true)}
           disabled={saving}
         >
           <Text style={styles.timeLabel}>Delivery Time</Text>
 
-          <Text style={styles.timeText}>{formatTime()}</Text>
+          {/* =============================== */}
+          {/* Mobile */}
+          {/* =============================== */}
 
-          <Text style={styles.timezoneText}>Myanmar Time · {timezone}</Text>
+          {Platform.OS !== "web" ? (
+            <>
+              <Text style={styles.timeText}>{formatTime()}</Text>
+
+              <Text style={styles.timezoneText}>Myanmar Time · {timezone}</Text>
+            </>
+          ) : (
+            /* ============================= */
+            /* Web */
+            /* ============================= */
+
+            <>
+              <TextInput
+                value={webTimeValue}
+                onChangeText={handleWebTimeChange}
+                placeholder="06:00"
+                keyboardType="numbers-and-punctuation"
+                style={styles.webTimeInput}
+              />
+
+              <Text style={styles.timezoneText}>Myanmar Time · {timezone}</Text>
+            </>
+          )}
         </Pressable>
 
-        {showPicker && (
+        {/* ================================= */}
+        {/* Mobile DateTimePicker ONLY */}
+        {/* ================================= */}
+
+        {Platform.OS !== "web" && showPicker && (
           <DateTimePicker
             value={selectedTime}
             mode="time"
@@ -144,6 +251,10 @@ export default function DeliveryTimeScreen() {
             onChange={handleTimeChange}
           />
         )}
+
+        {/* ================================= */}
+        {/* Info Card */}
+        {/* ================================= */}
 
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>Daily Morning Brief</Text>
@@ -154,6 +265,10 @@ export default function DeliveryTimeScreen() {
           </Text>
         </View>
 
+        {/* ================================= */}
+        {/* Selected Topics */}
+        {/* ================================= */}
+
         <View style={styles.selectedContainer}>
           <Text style={styles.selectedTitle}>Selected Topics</Text>
 
@@ -161,6 +276,10 @@ export default function DeliveryTimeScreen() {
             {categoryIds.length} topics selected
           </Text>
         </View>
+
+        {/* ================================= */}
+        {/* Continue */}
+        {/* ================================= */}
 
         <View style={styles.bottom}>
           <Pressable
@@ -227,6 +346,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111111",
   },
+
+  webTimeInput: {
+    marginTop: 8,
+    fontSize: 40,
+    fontWeight: "700",
+    color: "#111111",
+    padding: 0,
+    outlineStyle: "none",
+  } as any,
 
   timezoneText: {
     marginTop: 6,

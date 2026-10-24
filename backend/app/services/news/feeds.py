@@ -21,8 +21,10 @@ FOOTBALL_FEED = (
 
 WORLD_FEED = (
     "https://news.google.com/rss/search"
-    "?q=(world+news+OR+international+news"
-    "+OR+global+politics+OR+geopolitics)"
+    "?q=(international+politics+OR+geopolitics"
+    "+OR+international+conflict+OR+ceasefire"
+    "+OR+diplomatic+talks+OR+United+Nations)"
+    "+when:2d"
     "&hl=en-US&gl=US&ceid=US:en"
 )
 

@@ -1,14 +1,7 @@
 import { router } from "expo-router";
-import {
-  Pressable,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useState } from "react";
-
+import { SafeAreaView } from "react-native-safe-area-context";
 export default function PhoneLoginScreen() {
   const [phone, setPhone] = useState("");
 

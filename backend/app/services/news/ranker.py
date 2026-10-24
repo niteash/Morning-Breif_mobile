@@ -1,330 +1,422 @@
 from datetime import datetime, timezone
 import re
+from typing import Any
+
+from .relevance import calculate_relevance_score, normalize_text
 
 
-STOP_WORDS = {
-    "the",
-    "a",
-    "an",
-    "and",
-    "or",
-    "of",
-    "to",
-    "in",
-    "on",
-    "for",
-    "with",
-    "from",
-    "by",
-    "as",
-    "at",
-    "is",
-    "are",
-    "was",
-    "were",
-    "that",
-    "this",
-    "after",
-    "before",
-    "amid",
-    "says",
-    "said",
+# Trusted publishers receive a modest ranking bonus.
+# This is a ranking heuristic, not a guarantee of accuracy.
+TRUSTED_SOURCES = {
+    "reuters",
+    "associated press",
+    "ap news",
+    "bbc",
+    "financial times",
+    "bloomberg",
+    "the guardian",
+    "france 24",
+    "al jazeera",
+    "cnn",
+    "the new york times",
+    "washington post",
+    "the wall street journal",
+    "cnbc",
+    "techcrunch",
+    "the verge",
+    "ars technica",
+    "espn",
+    "sky sports",
 }
 
 
-def normalize_title(title: str) -> str:
-    """
-    Normalize a title so that small formatting differences
-    don't make duplicate stories look different.
-    """
+# Google News RSS frequently stores the aggregator as the source while
+# placing the original publisher at the end of the headline.
+PUBLISHER_ALIASES = {
+    "reuters": ("reuters",),
+    "associated press": ("associated press", "ap news"),
+    "bbc": ("bbc", "bbc news", "bbc sport"),
+    "financial times": ("financial times",),
+    "bloomberg": ("bloomberg",),
+    "the guardian": ("the guardian", "guardian"),
+    "france 24": ("france 24",),
+    "al jazeera": ("al jazeera",),
+    "cnn": ("cnn",),
+    "the new york times": ("the new york times", "nytimes"),
+    "washington post": ("the washington post", "washington post"),
+    "the wall street journal": ("the wall street journal", "wsj"),
+    "cnbc": ("cnbc",),
+    "techcrunch": ("techcrunch",),
+    "the verge": ("the verge",),
+    "ars technica": ("ars technica",),
+    "espn": ("espn",),
+    "sky sports": ("sky sports",),
+    "nikkei asia": ("nikkei asia",),
+    "the irrawaddy": ("the irrawaddy", "irrawaddy"),
+    "the diplomat": ("the diplomat",),
+}
 
-    title = title.lower().strip()
 
-    title = re.sub(
-        r"[^a-z0-9\s]",
-        " ",
-        title,
-    )
+def extract_publisher(story: dict[str, Any]) -> str:
+    """Extract the original publisher when Google News is the feed source."""
+    raw_source = str(story.get("source") or "").strip()
+    raw_title = str(story.get("title") or "").strip()
+    normalized_source = normalize_text(raw_source)
 
-    title = re.sub(
-        r"\s+",
-        " ",
-        title,
-    )
+    aggregator_sources = {
+        "google news world",
+        "google news business",
+        "google news technology",
+        "google news football",
+        "google news myanmar",
+    }
 
-    return title.strip()
+    if normalized_source not in aggregator_sources:
+        return normalized_source
+
+    # Google News titles often end with " - Publisher".
+    for publisher, aliases in PUBLISHER_ALIASES.items():
+        for alias in sorted(aliases, key=len, reverse=True):
+            pattern = (
+                r"\s[-–—|:]\s*"
+                + re.escape(alias)
+                + r"\s*$"
+            )
+            if re.search(pattern, raw_title, flags=re.IGNORECASE):
+                return publisher
+
+    # Some feeds use an unseparated publisher suffix.
+    for publisher, aliases in PUBLISHER_ALIASES.items():
+        for alias in sorted(aliases, key=len, reverse=True):
+            pattern = r"\s+" + re.escape(alias) + r"\s*$"
+            if re.search(pattern, raw_title, flags=re.IGNORECASE):
+                return publisher
+
+    return normalized_source
+
+STOP_WORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "been", "by",
+    "for", "from", "has", "have", "in", "into", "is", "it",
+    "its", "of", "on", "or", "that", "the", "their", "this",
+    "to", "was", "were", "will", "with", "after", "amid",
+    "over", "under", "new", "says", "say", "how", "why",
+    "what", "when", "who",
+}
 
 
-def get_title_words(title: str) -> set[str]:
-    """
-    Convert title into meaningful words.
-    """
+def _parse_timestamp(value: Any) -> datetime | None:
+    """Parse an ISO timestamp into an aware UTC datetime."""
+    if not value:
+        return None
 
-    normalized = normalize_title(title)
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        try:
+            parsed = datetime.fromisoformat(
+                str(value).replace("Z", "+00:00")
+            )
+        except (TypeError, ValueError):
+            return None
 
-    words = normalized.split()
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
+
+
+def _title_tokens(title: str) -> set[str]:
+    """Return normalized, meaningful title words."""
+    text = normalize_text(title)
+    tokens = re.findall(r"[a-z0-9]+", text)
 
     return {
-        word
-        for word in words
-        if word not in STOP_WORDS
-        and len(word) > 2
+        token
+        for token in tokens
+        if token not in STOP_WORDS and len(token) > 1
     }
 
 
-def calculate_similarity(
-    title_a: str,
-    title_b: str,
-) -> float:
-    """
-    Calculate Jaccard similarity between two titles.
-
-    Example:
-
-    A = {myanmar, airstrike, market, rakhine}
-    B = {myanmar, airstrike, market, rakhine, kills}
-
-    similarity = intersection / union
-    """
-
-    words_a = get_title_words(title_a)
-    words_b = get_title_words(title_b)
+def title_similarity(title_a: str, title_b: str) -> float:
+    """Compute Jaccard similarity between two normalized titles."""
+    words_a = _title_tokens(title_a)
+    words_b = _title_tokens(title_b)
 
     if not words_a or not words_b:
         return 0.0
 
-    intersection = words_a.intersection(words_b)
-    union = words_a.union(words_b)
+    union = words_a | words_b
 
-    return len(intersection) / len(union)
+    return len(words_a & words_b) / len(union)
 
 
-def get_story_timestamp(story: dict) -> datetime:
+def calculate_similarity(title_a: str, title_b: str) -> float:
+    """Backward-compatible alias used by clustering.py."""
+    return title_similarity(title_a, title_b)
+
+def calculate_source_score(source: str | None) -> int:
+    """Give recognized publishers a modest ranking bonus."""
+    normalized_source = normalize_text(source)
+
+    if not normalized_source:
+        return 0
+
+    if normalized_source in {
+        "google news world",
+        "google news business",
+        "google news technology",
+        "google news football",
+        "google news myanmar",
+    }:
+        return 2
+
+    if any(
+        trusted_source in normalized_source
+        for trusted_source in TRUSTED_SOURCES
+    ):
+        return 12
+
+    return 2
+
+
+def calculate_freshness_score(
+    published_at: Any,
+    now: datetime | None = None,
+) -> int:
     """
-    Safely convert published_at into a datetime.
+    Score recency. Stories older than 24 hours receive no bonus.
+
+    The selector should still enforce the requested time window.
     """
+    published = _parse_timestamp(published_at)
 
-    value = story.get("published_at")
+    if published is None:
+        return 0
 
-    if not value:
-        return datetime.min.replace(
-            tzinfo=timezone.utc
-        )
+    current_time = now or datetime.now(timezone.utc)
 
-    try:
-        timestamp = datetime.fromisoformat(
-            value.replace("Z", "+00:00")
-        )
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
 
-        if timestamp.tzinfo is None:
-            timestamp = timestamp.replace(
-                tzinfo=timezone.utc
-            )
+    current_time = current_time.astimezone(timezone.utc)
 
-        return timestamp
+    age_hours = (
+        current_time - published
+    ).total_seconds() / 3600
 
-    except Exception:
-        return datetime.min.replace(
-            tzinfo=timezone.utc
-        )
+    # Future timestamps should not receive an inflated freshness score.
+    if age_hours < -1:
+        return 0
+
+    age_hours = max(0, age_hours)
+
+    if age_hours < 1:
+        return 30
+    if age_hours < 3:
+        return 27
+    if age_hours < 6:
+        return 24
+    if age_hours < 12:
+        return 20
+    if age_hours < 18:
+        return 16
+    if age_hours <= 24:
+        return 12
+
+    return 0
 
 
-def calculate_story_score(story: dict) -> float:
-    """
-    Score a story primarily based on freshness.
-    """
+def calculate_story_score(
+    story: dict[str, Any],
+    category_slug: str | None = None,
+    now: datetime | None = None,
+) -> float:
+    """Calculate a ranking score for an individual news story."""
+    title = story.get("title") or ""
+    description = story.get("description") or ""
+    source = extract_publisher(story)
 
-    score = 0
-
-    published_at = get_story_timestamp(story)
-
-    minimum_datetime = datetime.min.replace(
-        tzinfo=timezone.utc
+    score = calculate_freshness_score(
+        story.get("published_at"),
+        now=now,
     )
 
-    if published_at != minimum_datetime:
+    score += calculate_source_score(source)
 
-        age_hours = (
-            datetime.now(timezone.utc)
-            - published_at
-        ).total_seconds() / 3600
+    if description.strip():
+        score += 3
 
-        if age_hours <= 3:
-            score += 100
+    if (story.get("author") or "").strip():
+        score += 1
 
-        elif age_hours <= 6:
-            score += 80
+    # Relevance is calculated against the story's actual category.
+    category = category_slug
 
-        elif age_hours <= 12:
-            score += 60
+    if category is None:
+        category = story.get("category_slug") or story.get("category")
 
-        elif age_hours <= 24:
-            score += 40
+    if isinstance(category, dict):
+        category = category.get("slug")
 
-        elif age_hours <= 48:
-            score += 20
-
-    if story.get("description"):
-        score += 5
-
-    if story.get("author"):
-        score += 2
+    if category:
+        relevance_score = calculate_relevance_score(
+            category_slug=str(category),
+            title=title,
+            description=description,
+        )
+        score += relevance_score * 2
 
     return score
 
 
-def remove_exact_duplicates(
-    stories: list[dict],
-) -> list[dict]:
-
+def _deduplicate_exact_titles(
+    stories: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Remove exact normalized title duplicates, keeping the best-ranked."""
+    result = []
     seen_titles = set()
 
-    unique_stories = []
+    for story in stories:
+        normalized_title = normalize_text(story.get("title") or "")
+
+        if not normalized_title:
+            continue
+
+        if normalized_title in seen_titles:
+            continue
+
+        seen_titles.add(normalized_title)
+        result.append(story)
+
+    return result
+
+
+def _deduplicate_similar_titles(
+    stories: list[dict[str, Any]],
+    similarity_threshold: float = 0.78,
+) -> list[dict[str, Any]]:
+    """
+    Remove highly similar headlines.
+
+    A higher threshold is deliberately used to reduce accidental removal
+    of different stories that happen to share a few keywords.
+    """
+    result = []
 
     for story in stories:
+        title = story.get("title") or ""
 
-        title = normalize_title(
-            story.get("title", "")
-        )
-
-        if not title:
+        if not title.strip():
             continue
 
-        if title in seen_titles:
-            continue
+        duplicate_found = False
 
-        seen_titles.add(title)
-
-        unique_stories.append(story)
-
-    return unique_stories
-
-
-def remove_similar_stories(
-    stories: list[dict],
-    similarity_threshold: float = 0.55,
-) -> list[dict]:
-    """
-    Remove stories that appear to describe the
-    same event.
-
-    We keep the higher-ranked story and remove
-    later stories that are highly similar.
-    """
-
-    selected = []
-
-    for story in stories:
-
-        title = story.get("title", "")
-
-        if not title:
-            continue
-
-        is_duplicate = False
-
-        for existing in selected:
-
-            existing_title = existing.get(
-                "title",
-                "",
-            )
-
-            similarity = calculate_similarity(
+        for selected_story in result:
+            similarity = title_similarity(
                 title,
-                existing_title,
+                selected_story.get("title") or "",
             )
 
             if similarity >= similarity_threshold:
-                is_duplicate = True
+                duplicate_found = True
                 break
 
-        if not is_duplicate:
-            selected.append(story)
+        if not duplicate_found:
+            result.append(story)
 
-    return selected
+    return result
 
 
 def rank_stories(
-    stories: list[dict],
-    limit: int = 5,
-) -> list[dict]:
+    stories: list[dict[str, Any]],
+    category_slug: str | None = None,
+    limit: int = 10,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Rank stories, remove duplicates, and return the top results.
 
-    # Step 1:
-    # Remove exact duplicate titles.
-    unique_stories = remove_exact_duplicates(
-        stories
-    )
+    Input dictionaries are copied so this function does not mutate the
+    caller's original story records.
+    """
+    if limit <= 0:
+        return []
 
-    # Step 2:
-    # Calculate score.
-    for story in unique_stories:
+    ranked_stories = []
+
+    for original_story in stories:
+        story = dict(original_story)
+
         story["_score"] = calculate_story_score(
-            story
+            story,
+            category_slug=category_slug,
+            now=now,
         )
 
-    # Step 3:
-    # Newest / highest-quality stories first.
-    ranked = sorted(
-        unique_stories,
-        key=lambda story: (
-            story["_score"],
-            get_story_timestamp(story),
-        ),
+        ranked_stories.append(story)
+
+    ranked_stories.sort(
+        key=lambda item: item["_score"],
         reverse=True,
     )
 
-    # Step 4:
-    # Remove stories describing almost
-    # the same event.
-    diverse_stories = remove_similar_stories(
-        ranked,
-        similarity_threshold=0.55,
+    ranked_stories = _deduplicate_exact_titles(ranked_stories)
+
+    ranked_stories = _deduplicate_similar_titles(
+        ranked_stories,
+        similarity_threshold=0.78,
     )
 
-    # Step 5:
-    # Keep requested number.
-    selected = diverse_stories[:limit]
+    return [
+        {
+            key: value
+            for key, value in story.items()
+            if key != "_score"
+        }
+        for story in ranked_stories[:limit]
+    ]
 
-    # Step 6:
-    # Never expose internal scoring.
-    for story in selected:
-        story.pop("_score", None)
-
-    return selected
 
 def rank_candidates(
-    stories: list[dict],
-    limit: int = 15,
-) -> list[dict]:
+    stories: list[dict[str, Any]],
+    category_slug: str | None = None,
+    limit: int = 20,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
     """
-    Rank candidate stories without removing
-    semantically similar stories.
+    Rank candidate stories without removing similar headlines.
 
-    This is used before event clustering.
+    This function is intended for the selector, which applies its own
+    story clustering afterward.
     """
+    if limit <= 0:
+        return []
 
-    unique_stories = remove_exact_duplicates(
-        stories
-    )
+    ranked_stories = []
 
-    for story in unique_stories:
+    for original_story in stories:
+        story = dict(original_story)
+
         story["_score"] = calculate_story_score(
-            story
+            story,
+            category_slug=category_slug,
+            now=now,
         )
 
-    ranked = sorted(
-        unique_stories,
-        key=lambda story: (
-            story["_score"],
-            get_story_timestamp(story),
-        ),
+        ranked_stories.append(story)
+
+    ranked_stories.sort(
+        key=lambda item: item["_score"],
         reverse=True,
     )
 
-    selected = ranked[:limit]
+    ranked_stories = _deduplicate_exact_titles(ranked_stories)
 
-    for story in selected:
-        story.pop("_score", None)
-
-    return selected
+    return [
+        {
+            key: value
+            for key, value in story.items()
+            if key != "_score"
+        }
+        for story in ranked_stories[:limit]
+    ]
