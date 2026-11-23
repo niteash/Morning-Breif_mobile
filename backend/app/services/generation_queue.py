@@ -64,10 +64,22 @@ def process_one_request() -> bool:
         _fail(job, 'generation_disabled', 'Audio generation is not configured on this backend')
     except ValueError:
         _fail(job, 'no_recent_news', 'No current stories are available in your selected categories')
+
+
     except Exception as error:
-        _fail(job, 'generation_failed', 'Generation failed temporarily. Please try again.')
-        logger.error('Queued generation failed: error_type=%s', type(error).__name__)
+        logger.error(
+            'Queued generation failed: stage=%s error_type=%s',
+            getattr(error, 'stage', 'unknown'),
+            getattr(error, 'error_type', type(error).__name__),
+        )
+        _fail(
+            job,
+            'generation_failed',
+            'Generation failed temporarily. Please try again.',
+        )
+
     return True
+
 
 
 def _fail(job: dict, code: str, message: str) -> None:

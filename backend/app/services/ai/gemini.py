@@ -167,19 +167,29 @@ def _generate_with_model(
 
     logger.info("AI generation started: model=%s input_characters=%s", model_name, len(prompt))
 
-    response = _get_client().models.generate_content(
-        model=model_name,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type='application/json' if structured else 'text/plain',
-            response_json_schema=response_json_schema,
-            max_output_tokens=4096,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                disable=True,
+
+    try:
+        response = _get_client().models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type='application/json' if structured else 'text/plain',
+                response_json_schema=response_json_schema,
+                max_output_tokens=4096,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                    disable=True,
+                ),
             ),
-        ),
-    )
+        )
+    except Exception as error:
+        logger.error(
+            "Gemini request failed: model=%s error_type=%s status_code=%s",
+            model_name,
+            type(error).__name__,
+            getattr(error, "code", None),
+        )
+        raise
 
     elapsed = time.perf_counter() - started
     if not response.candidates or response.candidates[0].finish_reason != types.FinishReason.STOP:
