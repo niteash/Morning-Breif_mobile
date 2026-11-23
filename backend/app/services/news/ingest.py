@@ -2,6 +2,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+from supabase import Client
+
 from app.lib.supabase import admin_supabase
 
 from .normalize import (
@@ -53,6 +55,7 @@ def ingest_feed(
     feed_url: str,
     category_id: UUID,
     source: str,
+    database: Client | None = None,
 ) -> dict:
     """
     Fetch RSS articles and insert relevant, recent, unique stories.
@@ -71,6 +74,7 @@ def ingest_feed(
     named title_hash.
     """
 
+    database = database or admin_supabase
     now = datetime.now(timezone.utc)
 
     fresh_cutoff = now - timedelta(
@@ -86,7 +90,7 @@ def ingest_feed(
     # -----------------------------------------
 
     category_response = (
-        admin_supabase
+        database
         .table("categories")
         .select("id, slug, name_en, name_my")
         .eq("id", str(category_id))
@@ -214,7 +218,7 @@ def ingest_feed(
 
         try:
             existing_exact = (
-                admin_supabase
+                database
                 .table("news_items")
                 .select("id")
                 .eq("content_hash", content_hash)
@@ -231,7 +235,7 @@ def ingest_feed(
             # ---------------------------------
 
             existing_title = (
-                admin_supabase
+                database
                 .table("news_items")
                 .select("id")
                 .eq("title_hash", title_hash)
@@ -243,10 +247,11 @@ def ingest_feed(
                 stats["skipped_duplicate"] += 1
                 continue
 
-        except Exception:
-            logger.exception(
-                "Failed duplicate checks for article: %s",
-                title,
+        except Exception as error:
+            logger.warning(
+                "Article duplicate check failed | source=%s | error_type=%s",
+                source,
+                type(error).__name__,
             )
             stats["skipped_insert_failure"] += 1
             continue
@@ -262,6 +267,7 @@ def ingest_feed(
             "description": description,
             "url": url,
             "author": normalized.get("author"),
+            "image_url": normalized.get("image_url"),
             "published_at": published_at.isoformat(),
             "content_hash": content_hash,
             "title_hash": title_hash,
@@ -273,7 +279,7 @@ def ingest_feed(
 
         try:
             response = (
-                admin_supabase
+                database
                 .table("news_items")
                 .insert(row)
                 .execute()
@@ -294,10 +300,11 @@ def ingest_feed(
                     title,
                 )
 
-        except Exception:
-            logger.exception(
-                "Failed to insert article: %s",
-                title,
+        except Exception as error:
+            logger.warning(
+                "Article insertion failed | source=%s | error_type=%s",
+                source,
+                type(error).__name__,
             )
             stats["skipped_insert_failure"] += 1
 

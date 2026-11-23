@@ -1,0 +1,205 @@
+{
+  "approved_run_id": "4a4a3559-e10a-489b-802b-609404f31d94",
+  "batch_sha256": "bc6dc2765bcff65fb466a8f181835cd2f08c60172523fccc5c34cde3e56f4898",
+  "category_counts": {
+    "business": {
+      "failed": 0,
+      "inserted": 29,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "football": {
+      "failed": 0,
+      "inserted": 28,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "myanmar": {
+      "failed": 0,
+      "inserted": 9,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "technology": {
+      "failed": 0,
+      "inserted": 29,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "world": {
+      "failed": 0,
+      "inserted": 5,
+      "rejected": 0,
+      "skipped": 0
+    }
+  },
+  "database_write": {
+    "attempted": true,
+    "rows_attempted": 100,
+    "rows_committed": 100,
+    "rows_with_unknown_commit_status": 0,
+    "write_failures": 0
+  },
+  "dry_run": false,
+  "environment": "staging",
+  "run_id": "e2283b13-8cdb-4501-bfcb-d7e02090a879",
+  "sources": [
+    {
+      "category": "myanmar",
+      "failed": 0,
+      "inserted": 10,
+      "rejected": 0,
+      "rows_attempted": 10,
+      "skipped": 0,
+      "source": "Global New Light of Myanmar",
+      "source_id": "gnlm"
+    },
+    {
+      "category": "football",
+      "failed": 0,
+      "inserted": 6,
+      "rejected": 0,
+      "rows_attempted": 6,
+      "skipped": 0,
+      "source": "Engadget",
+      "source_id": "engadget"
+    },
+    {
+      "category": "business",
+      "failed": 0,
+      "inserted": 4,
+      "rejected": 0,
+      "rows_attempted": 4,
+      "skipped": 0,
+      "source": "The Verge",
+      "source_id": "the_verge"
+    },
+    {
+      "category": "world",
+      "failed": 0,
+      "inserted": 5,
+      "rejected": 0,
+      "rows_attempted": 5,
+      "skipped": 0,
+      "source": "Hacker News",
+      "source_id": "hacker_news"
+    },
+    {
+      "category": "football",
+      "failed": 0,
+      "inserted": 4,
+      "rejected": 0,
+      "rows_attempted": 4,
+      "skipped": 0,
+      "source": "CNET",
+      "source_id": "cnet"
+    },
+    {
+      "category": "business",
+      "failed": 0,
+      "inserted": 5,
+      "rejected": 0,
+      "rows_attempted": 5,
+      "skipped": 0,
+      "source": "Wired",
+      "source_id": "wired"
+    },
+    {
+      "category": "world",
+      "failed": 0,
+      "inserted": 6,
+      "rejected": 0,
+      "rows_attempted": 6,
+      "skipped": 0,
+      "source": "Slashdot",
+      "source_id": "slashdot"
+    },
+    {
+      "category": "technology",
+      "failed": 0,
+      "inserted": 3,
+      "rejected": 0,
+      "rows_attempted": 3,
+      "skipped": 0,
+      "source": "TechCrunch",
+      "source_id": "techcrunch"
+    },
+    {
+      "category": "football",
+      "failed": 0,
+      "inserted": 19,
+      "rejected": 0,
+      "rows_attempted": 19,
+      "skipped": 0,
+      "source": "BBC Sport Football",
+      "source_id": "bbc_football"
+    },
+    {
+      "category": "business",
+      "failed": 0,
+      "inserted": 3,
+      "rejected": 0,
+      "rows_attempted": 3,
+      "skipped": 0,
+      "source": "Ars Technica",
+      "source_id": "ars_technica"
+    },
+    {
+      "category": "world",
+      "failed": 0,
+      "inserted": 9,
+      "rejected": 0,
+      "rows_attempted": 9,
+      "skipped": 0,
+      "source": "The Guardian Football",
+      "source_id": "guardian_football"
+    },
+    {
+      "category": "business",
+      "failed": 0,
+      "inserted": 3,
+      "rejected": 0,
+      "rows_attempted": 3,
+      "skipped": 0,
+      "source": "NYT Technology",
+      "source_id": "nyt_technology"
+    },
+    {
+      "category": "business",
+      "failed": 0,
+      "inserted": 7,
+      "rejected": 0,
+      "rows_attempted": 7,
+      "skipped": 0,
+      "source": "DEV Community",
+      "source_id": "dev_community"
+    },
+    {
+      "category": "business",
+      "failed": 0,
+      "inserted": 14,
+      "rejected": 0,
+      "rows_attempted": 14,
+      "skipped": 0,
+      "source": "Forbes Business",
+      "source_id": "forbes_business"
+    },
+    {
+      "category": "business",
+      "failed": 0,
+      "inserted": 2,
+      "rejected": 0,
+      "rows_attempted": 2,
+      "skipped": 0,
+      "source": "CNBC Finance",
+      "source_id": "cnbc_finance"
+    }
+  ],
+  "totals": {
+    "failed": 0,
+    "inserted": 100,
+    "rejected": 0,
+    "rows_attempted": 100,
+    "skipped": 0
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "project": "wwtntxknfjagdjdgiaxu",
+  "date": "2026-11-15",
+  "batch_sha256": "5c794ddd6dbf01ecefaf32a5e08aec5ae89db17daa10f9eb53195e9a964362ce",
+  "counts": {
+    "technology": 5,
+    "myanmar": 4,
+    "world": 0
+  },
+  "can_generate": false,
+  "entitlement_status": "claim_unavailable",
+  "existing_briefing": false,
+  "existing_job": false,
+  "missing_configuration": [
+    "GEMINI_API_KEY",
+    "AZURE_SPEECH_KEY",
+    "AZURE_SPEECH_REGION"
+  ],
+  "rehearsal": {
+    "mode": "mocked_entitlement_providers_storage_and_database",
+    "status": "ready",
+    "duration_seconds": 3,
+    "prompt_characters": 6136,
+    "owner_path_valid": true,
+    "external_writes": 0,
+    "paid_calls": 0
+  }
+}

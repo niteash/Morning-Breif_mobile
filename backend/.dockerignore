@@ -1,0 +1,14 @@
+__pycache__
+.pytest_cache
+.venv
+tests
+db_tests
+reports
+migrations/backups
+scripts
+*.pyc
+*.log
+.env
+.env.*
+!.env.example
+*service-account*.json

@@ -242,6 +242,7 @@ def calculate_story_score(
     )
 
     score += calculate_source_score(source)
+    score += float(story.get('_preference_score') or 0)
 
     if description.strip():
         score += 3

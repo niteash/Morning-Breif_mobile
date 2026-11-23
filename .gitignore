@@ -156,3 +156,6 @@ test-results/
 
 build/
 release/
+
+# Local one-time audio authorization markers
+.audio-test/

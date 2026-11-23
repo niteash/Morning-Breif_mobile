@@ -1,0 +1,43 @@
+services:
+  api:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    env_file:
+      - ${BACKEND_ENV_FILE:-./production.env}
+    environment:
+      APP_ENV: production
+      SCHEDULER_ENABLED: "false"
+      NEWS_INGESTION_ENABLED: "false"
+      PUSH_DELIVERY_ENABLED: "false"
+      ACCOUNT_DELETION_WORKER_ENABLED: "false"
+      RETENTION_WORKER_ENABLED: "false"
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    env_file:
+      - ${BACKEND_ENV_FILE:-./production.env}
+    environment:
+      APP_ENV: production
+      PORT: "8001"
+    volumes:
+      - type: bind
+        source: ./firebase-service-account.json
+        target: /run/secrets/firebase-service-account.json
+        read_only: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/ready',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

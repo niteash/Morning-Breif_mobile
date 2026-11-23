@@ -1,15 +1,13 @@
-import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { router } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { MotionPressable, Reveal } from '../../components/ui/Motion';
+import { StepProgress, SunriseOrb } from '../../components/ui/SunriseMotion';
+import { useCallback, useEffect, useState } from "react";
+import { View } from 'react-native';
+import { Button, Loading, Notice, Screen, Type } from '../../components/ui/primitives';
+import { usePalette, usePreferences } from '../../features/preferences/PreferencesProvider';
+import { router, useFocusEffect } from "expo-router";
 import { getCategories } from "../../services/categoryApi";
+
+import { getMyCategories } from "../../services/userApi";
 
 type Category = {
   id: string;
@@ -20,30 +18,40 @@ type Category = {
 };
 
 export default function CategoriesScreen() {
+  const colors = usePalette(), { language } = usePreferences();
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [navigating, setNavigating] = useState(false);
 
-  useEffect(() => {
-    loadCategories();
-  }, []);
 
   async function loadCategories() {
     try {
-      console.log("LOADING CATEGORIES FROM BACKEND...");
+      setLoading(true);
+      setError(null);
 
-      const response = await getCategories();
-
-      console.log("BACKEND CATEGORIES:", response.categories);
-
-      setCategories(response.categories);
+      const [response, saved] = await Promise.all([getCategories(), getMyCategories()]);
+      const available = response.categories as Category[];
+      setCategories(available);
+      setSelectedCategories(saved.categories.map((item) => item.category_id)
+        .filter((id) => available.some((category) => category.id === id)));
     } catch (error) {
-      console.error("CATEGORY API ERROR:", error);
+      setError(error instanceof Error ? error.message : "Unable to load categories.");
     } finally {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    // Begin the initial network request; loading is already true.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadCategories();
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    setNavigating(false);
+  }, []));
 
   function toggleCategory(categoryId: string) {
     if (navigating) return;
@@ -63,17 +71,14 @@ export default function CategoriesScreen() {
     }
 
     if (selectedCategories.length === 0) {
-      console.log("NO CATEGORY SELECTED");
       return;
     }
 
-    console.log("SELECTED CATEGORY IDS:", selectedCategories);
 
     setNavigating(true);
 
     const categoryParam = selectedCategories.join(",");
 
-    console.log("NAVIGATING TO DELIVERY TIME:", categoryParam);
 
     router.push({
       pathname: "/delivery-time",
@@ -83,189 +88,22 @@ export default function CategoriesScreen() {
     });
   }
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
-
-        <Text style={styles.loadingText}>Categories ကို ပြင်ဆင်နေပါတယ်...</Text>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.title}>ဘာတွေကို{"\n"}သိချင်လဲ?</Text>
-
-        <Text style={styles.description}>
-          သင်စိတ်ဝင်စားတဲ့ သတင်းအမျိုးအစားတွေကို ရွေးချယ်ပါ။
-        </Text>
-
-        <View style={styles.categoryList}>
-          {categories.map((category) => {
-            const selected = selectedCategories.includes(category.id);
-
-            return (
-              <Pressable
-                key={category.id}
-                onPress={() => toggleCategory(category.id)}
-                disabled={navigating}
-                style={[styles.categoryCard, selected && styles.selectedCard]}
-              >
-                <View style={styles.categoryTextContainer}>
-                  <Text style={styles.categoryMyanmar}>{category.name_my}</Text>
-
-                  <Text style={styles.categoryEnglish}>{category.name_en}</Text>
-                </View>
-
-                <View
-                  style={[styles.checkbox, selected && styles.selectedCheckbox]}
-                >
-                  {selected && <Text style={styles.checkmark}>✓</Text>}
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <Pressable
-          style={[
-            styles.continueButton,
-            selectedCategories.length === 0 && styles.disabledButton,
-            navigating && styles.disabledButton,
-          ]}
-          disabled={selectedCategories.length === 0 || navigating}
-          onPress={handleContinue}
-        >
-          {navigating ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.continueText}>Continue</Text>
-          )}
-        </Pressable>
-      </ScrollView>
-    </SafeAreaView>
-  );
+  if (loading) return <Screen><Loading label="ကဏ္ဍများကို ရယူနေသည်…" /></Screen>;
+  return <Screen>
+    <StepProgress step={2} />
+    <SunriseOrb size={110} />
+    <Type variant="muted">နေ့သစ် · သင့်စိတ်ဝင်စားမှုများ</Type>
+    <Type variant="hero">ဘာတွေကို သိချင်လဲ?</Type>
+    <Type variant="muted">သင်နားဆင်လိုသော သတင်းကဏ္ဍများကို ရွေးချယ်ပါ။ နောက်တစ်ဆင့်တွင် သိမ်းဆည်းပါမည်။</Type>
+    <Notice message={error} retry={loadCategories} />
+    {!error && categories.length === 0 ? <Type variant="muted">ရွေးချယ်ရန် ကဏ္ဍ မရရှိသေးပါ။</Type> : null}
+    {categories.map((category, index) => {
+      const selected = selectedCategories.includes(category.id);
+      return <Reveal key={category.id} delay={index * 40}><MotionPressable accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled: navigating }} disabled={navigating} onPress={() => toggleCategory(category.id)} style={{ backgroundColor: colors.surface, borderWidth: selected ? 2 : 1, borderColor: selected ? colors.text : colors.border, borderRadius: 18, padding: 22, minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+        <View style={{ flex: 1 }}><Type variant="label" style={{ fontSize: 20 }}>{language === 'my' ? category.name_my : category.name_en}</Type><Type variant="muted">{language === 'my' ? category.name_en : category.name_my}</Type></View>
+        <View style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 1, borderColor: colors.text, backgroundColor: selected ? colors.text : colors.surface, alignItems: 'center', justifyContent: 'center' }}><Type style={{ color: colors.surface, fontSize: 16, lineHeight: 24 }}>{selected ? '✓' : ''}</Type></View>
+      </MotionPressable></Reveal>;
+    })}
+    <Button title="ဆက်လုပ်မယ်" busy={navigating} disabled={Boolean(error) || !selectedCategories.length} onPress={handleContinue} />
+  </Screen>;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F7F7F7",
-  },
-
-  content: {
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 40,
-  },
-
-  title: {
-    fontSize: 30,
-    lineHeight: 40,
-    fontWeight: "700",
-    color: "#111111",
-  },
-
-  description: {
-    marginTop: 14,
-    fontSize: 15,
-    lineHeight: 24,
-    color: "#666666",
-  },
-
-  categoryList: {
-    marginTop: 30,
-    gap: 12,
-  },
-
-  categoryCard: {
-    minHeight: 76,
-    paddingHorizontal: 18,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E5E5",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  selectedCard: {
-    borderColor: "#111111",
-    borderWidth: 2,
-  },
-
-  categoryTextContainer: {
-    flex: 1,
-  },
-
-  categoryMyanmar: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#111111",
-  },
-
-  categoryEnglish: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#888888",
-  },
-
-  checkbox: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: "#CCCCCC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  selectedCheckbox: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
-  },
-
-  checkmark: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-
-  continueButton: {
-    height: 56,
-    marginTop: 32,
-    borderRadius: 16,
-    backgroundColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  disabledButton: {
-    opacity: 0.4,
-  },
-
-  continueText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: "#F7F7F7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  loadingText: {
-    marginTop: 14,
-    color: "#666666",
-    fontSize: 14,
-  },
-});

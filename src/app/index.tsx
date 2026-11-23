@@ -1,113 +1,54 @@
-import { router } from "expo-router";
-import { useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-
-import { ensureAuthenticated } from "../lib/auth";
-import { SafeAreaView } from "react-native-safe-area-context";
-export default function Index() {
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { supabase } from '../lib/supabase';
+import { Button, Notice, Screen, Type } from '../components/ui/primitives';
+import { Reveal } from '../components/ui/Motion';
+import { RotatingGlobe } from '../components/ui/RotatingGlobe';
+import { usePalette } from '../features/preferences/PreferencesProvider';
+export default function Welcome() {
+  const colors = usePalette();
+  const styles = makeStyles(colors);
   const [loading, setLoading] = useState(false);
-
-  const handleStart = async () => {
+  const [error, setError] = useState<string | null>(null);
+  async function start() {
+    if (loading) return;
+    setLoading(true); setError(null);
     try {
-      setLoading(true);
-
-      const session = await ensureAuthenticated();
-
-      console.log("CURRENT USER ID:", session?.user?.id);
-
-      router.push("/phone-login");
-    } catch (error) {
-      console.error("START ERROR:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.brand}>MORNING BRIEF</Text>
-
-        <View>
-          <Text style={styles.title}>
-            မနက်တိုင်း{"\n"}
-            သတင်းတွေကို{"\n"}
-            လွယ်လွယ်ကူကူ သိပါစေ။
-          </Text>
-
-          <Text style={styles.subtitle}>
-            သင်စိတ်ဝင်စားတဲ့ သတင်းတွေကို ရွေးချယ်ပြီး မနက်တိုင်း
-            နားထောင်နိုင်ပါတယ်။
-          </Text>
-        </View>
-
-        <Pressable
-          style={styles.button}
-          onPress={handleStart}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>စတင်မယ်</Text>
-          )}
-        </Pressable>
-      </View>
-    </SafeAreaView>
-  );
+      const { data: { session }, error: failure } = await supabase.auth.getSession();
+      if (failure) throw failure;
+      router.push(session && !session.user.is_anonymous ? '/home' : '/sign-in');
+    } catch { setError('အကောင့်ကို စစ်ဆေးမရပါ။ ပြန်ကြိုးစားပါ။'); }
+    finally { setLoading(false); }
+  }
+  return <Screen contentContainerStyle={styles.screen}>
+    <View style={styles.cornerMark}><View style={styles.cornerDot} /><Type translate={false} variant="muted" style={styles.cornerText}>01 / MORNING</Type></View>
+    <View style={styles.identity}>
+      <Reveal><RotatingGlobe size={232} /></Reveal>
+      <Reveal delay={90} style={styles.wordmark}>
+        <Type variant="title" style={styles.burmeseName}>နေ့သစ်</Type>
+      </Reveal>
+      <Reveal delay={170}>
+        <Type translate={false} variant="muted" style={styles.tagline}>YOUR PERSONAL NEWS APP</Type>
+      </Reveal>
+    </View>
+    <Reveal delay={220} style={styles.action}>
+      <Notice message={error} />
+      <Button title="စတင်မယ်" busy={loading} onPress={start} />
+      <Type variant="muted" style={styles.caption}>နောက်ဆုံးသတင်းများကို မြန်မာဘာသာဖြင့် နားဆင်ပါ</Type>
+    </Reveal>
+  </Screen>;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 32,
-    justifyContent: "space-between",
-  },
-
-  brand: {
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 2,
-    color: "#B11226",
-  },
-
-  title: {
-    fontSize: 32,
-    lineHeight: 44,
-    fontWeight: "800",
-    color: "#111111",
-  },
-
-  subtitle: {
-    marginTop: 20,
-    fontSize: 16,
-    lineHeight: 26,
-    color: "#ac0303",
-  },
-
-  button: {
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: "#B11226",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 17,
-    fontWeight: "800",
-  },
+const makeStyles = (colors: ReturnType<typeof usePalette>) => StyleSheet.create({
+  screen: { justifyContent: 'space-between', gap: 28, paddingTop: 18 },
+  cornerMark: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cornerDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.text },
+  cornerText: { fontSize: 11, letterSpacing: 2.4, color: colors.secondary },
+  identity: { alignItems: 'center', gap: 12 },
+  wordmark: { alignItems: 'center', marginTop: 8 },
+  burmeseName: { color: colors.text, fontSize: 34, lineHeight: 48, textAlign: 'center' },
+  tagline: { color: colors.secondary, fontSize: 11, lineHeight: 18, letterSpacing: 3.2, textAlign: 'center' },
+  action: { gap: 14 },
+  caption: { textAlign: 'center', fontSize: 13 },
 });

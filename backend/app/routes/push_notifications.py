@@ -101,11 +101,8 @@ async def register_device(
     except HTTPException:
         raise
 
-    except Exception:
-        logger.exception(
-            "Failed to register device for user %s.",
-            user_id,
-        )
+    except Exception as error:
+        logger.warning("Device registration failed: error_type=%s", type(error).__name__)
 
         raise HTTPException(
             status_code=500,
@@ -141,11 +138,8 @@ async def unregister_device(
             "message": "Device unregistered.",
         }
 
-    except Exception:
-        logger.exception(
-            "Failed to unregister device for user %s.",
-            user_id,
-        )
+    except Exception as error:
+        logger.warning("Device unregistration failed: error_type=%s", type(error).__name__)
 
         raise HTTPException(
             status_code=500,

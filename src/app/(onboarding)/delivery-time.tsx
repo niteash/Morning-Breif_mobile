@@ -1,14 +1,8 @@
-import { useState } from "react";
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { StepProgress, SunriseOrb } from '../../components/ui/SunriseMotion';
+import { useCopy } from '../../features/preferences/PreferencesProvider';
+import { useEffect, useState } from "react";
+import { Platform, Pressable, View } from 'react-native';
+import { Button, CircleButton, Field, Loading, Notice, Panel, Screen, Type } from '../../components/ui/primitives';
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -16,18 +10,17 @@ import DateTimePicker, {
 import { router, useLocalSearchParams } from "expo-router";
 
 import {
+  getOptionalPreferences,
   updateMyPreferences,
   updateMyCategories,
 } from "../../services/userApi";
+import { apiRequest } from '../../lib/api';
 
 export default function DeliveryTimeScreen() {
+  const t = useCopy();
   const { categories } = useLocalSearchParams<{
     categories?: string;
   }>();
-
-  console.log("DELIVERY TIME SCREEN MOUNTED");
-
-  console.log("DELIVERY TIME CATEGORY PARAM:", categories);
 
   const [selectedTime, setSelectedTime] = useState(() => {
     const date = new Date();
@@ -41,10 +34,38 @@ export default function DeliveryTimeScreen() {
   });
 
   const [showPicker, setShowPicker] = useState(false);
+  const [webDraft, setWebDraft] = useState<string>();
 
+  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const timezone = "Asia/Yangon";
+  const [timezone, setTimezone] = useState("Asia/Yangon");
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+
+  async function loadPreferences() {
+    setLoading(true);
+    setError(null);
+    try {
+      const profile = await getOptionalPreferences();
+      if (profile) {
+        setTimezone(profile.timezone);
+        setSelectedTime((previous) => {
+          const date = new Date(previous);
+          date.setHours(profile.delivery_hour, profile.delivery_minute, 0, 0);
+          return date;
+        });
+      }
+      setLoaded(true);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to load preferences.");
+    } finally { setLoading(false); }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadPreferences();
+  }, []);
 
   const categoryIds =
     typeof categories === "string" ? categories.split(",").filter(Boolean) : [];
@@ -83,6 +104,7 @@ export default function DeliveryTimeScreen() {
   // =========================================
 
   function handleWebTimeChange(value: string) {
+    setWebDraft(value);
     if (!value) {
       return;
     }
@@ -115,12 +137,18 @@ export default function DeliveryTimeScreen() {
   // =========================================
 
   async function handleContinue() {
-    if (saving) {
+    if (saving || !loaded) {
       return;
     }
 
+    let preferencesSaved = false;
     try {
       setSaving(true);
+      setError(null);
+
+      if (Platform.OS === 'web' && webDraft !== undefined && !/^([01]\d|2[0-3]):[0-5]\d$/.test(webDraft)) {
+        throw new Error('၂၄ နာရီပုံစံဖြင့် အချိန်ထည့်ပါ။ ဥပမာ 06:30');
+      }
 
       if (categoryIds.length === 0) {
         throw new Error("No categories were selected.");
@@ -130,45 +158,36 @@ export default function DeliveryTimeScreen() {
 
       const deliveryMinute = selectedTime.getMinutes();
 
-      console.log("CATEGORY PARAM:", categories);
-
-      console.log("CATEGORY IDS:", categoryIds);
-
-      console.log("DELIVERY TIME:", {
-        hours: deliveryHour,
-        minutes: deliveryMinute,
-        timezone,
-      });
-
       // =====================================
       // Save delivery time
       // =====================================
 
-      const preferencesResponse = await updateMyPreferences({
+      await updateMyPreferences({
         timezone,
         delivery_hour: deliveryHour,
         delivery_minute: deliveryMinute,
       });
 
-      console.log("PREFERENCES SAVED THROUGH BACKEND:", preferencesResponse);
 
       // =====================================
       // Save selected categories
       // =====================================
 
-      const categoriesResponse = await updateMyCategories(categoryIds);
+      preferencesSaved = true;
+      await updateMyCategories(categoryIds);
+      // Trial claim is independent and retryable; onboarding remains saved on outage.
+      try { await apiRequest('/api/v1/entitlements/claim', { method: 'POST' }); }
+      catch { router.navigate({ pathname: '/home', params: { trialClaimRetry: '1' } }); return; }
 
-      console.log("CATEGORIES SAVED THROUGH BACKEND:", categoriesResponse);
 
-      console.log("ONBOARDING COMPLETED");
 
       // =====================================
       // Go to Home
       // =====================================
 
-      router.replace("/home");
+      router.navigate("/home");
     } catch (error) {
-      console.error("ONBOARDING SAVE ERROR:", error);
+      setError((preferencesSaved ? "အချိန်ကို သိမ်းပြီးပါပြီ။ ကဏ္ဍများ သိမ်းမရသေးပါ။ ပြန်ကြိုးစားပါ။ " : "") + (error instanceof Error ? error.message : "သိမ်းဆည်းမရပါ။ ပြန်ကြိုးစားပါ။"));
     } finally {
       setSaving(false);
     }
@@ -183,241 +202,22 @@ export default function DeliveryTimeScreen() {
     "0",
   )}:${String(selectedTime.getMinutes()).padStart(2, "0")}`;
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        {/* ================================= */}
-        {/* Title */}
-        {/* ================================= */}
-
-        <Text style={styles.title}>
-          ဘယ်အချိန်မှာ{"\n"}
-          Morning Brief ရချင်လဲ?
-        </Text>
-
-        <Text style={styles.description}>
-          မနက်တိုင်း သင်ရွေးချယ်ထားတဲ့ သတင်းတွေကို ဒီအချိန်မှာ ရရှိပါမယ်။
-        </Text>
-
-        {/* ================================= */}
-        {/* Delivery Time */}
-        {/* ================================= */}
-
-        <Pressable
-          style={styles.timeCard}
-          onPress={() => Platform.OS !== "web" && setShowPicker(true)}
-          disabled={saving}
-        >
-          <Text style={styles.timeLabel}>Delivery Time</Text>
-
-          {/* =============================== */}
-          {/* Mobile */}
-          {/* =============================== */}
-
-          {Platform.OS !== "web" ? (
-            <>
-              <Text style={styles.timeText}>{formatTime()}</Text>
-
-              <Text style={styles.timezoneText}>Myanmar Time · {timezone}</Text>
-            </>
-          ) : (
-            /* ============================= */
-            /* Web */
-            /* ============================= */
-
-            <>
-              <TextInput
-                value={webTimeValue}
-                onChangeText={handleWebTimeChange}
-                placeholder="06:00"
-                keyboardType="numbers-and-punctuation"
-                style={styles.webTimeInput}
-              />
-
-              <Text style={styles.timezoneText}>Myanmar Time · {timezone}</Text>
-            </>
-          )}
-        </Pressable>
-
-        {/* ================================= */}
-        {/* Mobile DateTimePicker ONLY */}
-        {/* ================================= */}
-
-        {Platform.OS !== "web" && showPicker && (
-          <DateTimePicker
-            value={selectedTime}
-            mode="time"
-            display="spinner"
-            onChange={handleTimeChange}
-          />
-        )}
-
-        {/* ================================= */}
-        {/* Info Card */}
-        {/* ================================= */}
-
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Daily Morning Brief</Text>
-
-          <Text style={styles.infoText}>
-            သင်ရွေးချယ်ထားတဲ့ topics တွေကို တစ်စုတစ်စည်းတည်း brief တစ်ခုအဖြစ်
-            ရရှိပါမယ်။
-          </Text>
-        </View>
-
-        {/* ================================= */}
-        {/* Selected Topics */}
-        {/* ================================= */}
-
-        <View style={styles.selectedContainer}>
-          <Text style={styles.selectedTitle}>Selected Topics</Text>
-
-          <Text style={styles.selectedText}>
-            {categoryIds.length} topics selected
-          </Text>
-        </View>
-
-        {/* ================================= */}
-        {/* Continue */}
-        {/* ================================= */}
-
-        <View style={styles.bottom}>
-          <Pressable
-            style={[styles.continueButton, saving && styles.disabledButton]}
-            onPress={handleContinue}
-            disabled={saving}
-          >
-            {saving ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.continueText}>Continue</Text>
-            )}
-          </Pressable>
-        </View>
-      </View>
-    </SafeAreaView>
-  );
+  return <Screen keyboard>
+    <CircleButton label="ကဏ္ဍများ ပြန်ရွေးမယ်" disabled={saving} onPress={() => router.canGoBack() ? router.back() : router.replace('/categories')}>‹</CircleButton>
+    <StepProgress step={3} />
+    <SunriseOrb size={140} />
+    <Type variant="muted">နေ့သစ် · နားဆင်ချိန်</Type>
+    <Type variant="hero">ဘယ်အချိန်မှာ နားဆင်ချင်လဲ?</Type>
+    <Type variant="muted">သင်ရွေးထားသည့် အချိန်အတွက် နေ့စဉ်အနှစ်ချုပ်ကို ပြင်ဆင်ပေးပါမည်။</Type>
+    {loading ? <Loading /> : null}<Notice message={error} retry={!loaded && !loading ? loadPreferences : undefined} />
+    <Panel>
+      <Type variant="label">နေ့စဉ် ရယူမည့်အချိန်</Type>
+      {Platform.OS !== 'web' ? <Pressable accessibilityRole="button" accessibilityLabel={t('နေ့စဉ် ရယူမည့်အချိန် ပြောင်းမယ်')} disabled={saving || !loaded} onPress={() => setShowPicker(true)} style={{ minHeight: 80, justifyContent: 'center' }}><Type variant="hero">{formatTime()}</Type><Type variant="muted">အချိန်ပြောင်းရန် နှိပ်ပါ</Type></Pressable> : <Field label="အချိန် (HH:mm)" value={webDraft ?? webTimeValue} editable={loaded && !saving} onChangeText={handleWebTimeChange} placeholder="06:00" maxLength={5} />}
+      <Type variant="muted">စံတော်ချိန် · {timezone}</Type>
+      <Field label="စံတော်ချိန် (IANA)" value={timezone} onChangeText={setTimezone} editable={loaded && !saving} autoCapitalize="none" placeholder="Asia/Yangon" />
+    </Panel>
+    {Platform.OS !== 'web' && showPicker ? <DateTimePicker value={selectedTime} mode="time" display="spinner" onChange={handleTimeChange} /> : null}
+    <Panel><Type variant="label">ရွေးချယ်ထားသော ကဏ္ဍ {categoryIds.length} ခု</Type><Type variant="muted">ကဏ္ဍအားလုံးကို အသံအနှစ်ချုပ် တစ်ခုတည်းအဖြစ် နားဆင်နိုင်ပါမည်။</Type></Panel>
+    <View style={{ gap: 12 }}><Button title="သိမ်းပြီး ဆက်လုပ်မယ်" busy={saving} disabled={!loaded} onPress={handleContinue} /></View>
+  </Screen>;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F7F7F7",
-  },
-
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 24,
-  },
-
-  title: {
-    fontSize: 30,
-    lineHeight: 40,
-    fontWeight: "700",
-    color: "#111111",
-  },
-
-  description: {
-    marginTop: 14,
-    fontSize: 15,
-    lineHeight: 24,
-    color: "#666666",
-  },
-
-  timeCard: {
-    marginTop: 32,
-    padding: 24,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E5E5",
-  },
-
-  timeLabel: {
-    fontSize: 14,
-    color: "#777777",
-  },
-
-  timeText: {
-    marginTop: 8,
-    fontSize: 40,
-    fontWeight: "700",
-    color: "#111111",
-  },
-
-  webTimeInput: {
-    marginTop: 8,
-    fontSize: 40,
-    fontWeight: "700",
-    color: "#111111",
-    padding: 0,
-    outlineStyle: "none",
-  } as any,
-
-  timezoneText: {
-    marginTop: 6,
-    fontSize: 13,
-    color: "#999999",
-  },
-
-  infoCard: {
-    marginTop: 18,
-    padding: 20,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-  },
-
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111111",
-  },
-
-  infoText: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 22,
-    color: "#666666",
-  },
-
-  selectedContainer: {
-    marginTop: 18,
-    paddingHorizontal: 4,
-  },
-
-  selectedTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#111111",
-  },
-
-  selectedText: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#777777",
-  },
-
-  bottom: {
-    marginTop: "auto",
-  },
-
-  continueButton: {
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  disabledButton: {
-    opacity: 0.5,
-  },
-
-  continueText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});

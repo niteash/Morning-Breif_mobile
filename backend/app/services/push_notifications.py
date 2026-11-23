@@ -1,91 +1,88 @@
+"""Firebase adapter. Return only safe outcome codes; never log tokens/responses."""
 import logging
 import os
+import threading
 
 import firebase_admin
-
 from firebase_admin import credentials, messaging
 
 logger = logging.getLogger(__name__)
+_initialization_lock = threading.Lock()
 
 
-def initialize_firebase() -> None:
-    """Initialize Firebase Admin SDK once."""
-
-    if firebase_admin._apps:
-        return
-
-    credentials_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
-
-    if not credentials_path:
-        logger.warning(
-            "Firebase credentials are not configured. "
-            "Push notifications are disabled."
-        )
-        return
-
-    if not os.path.isfile(credentials_path):
-        logger.error(
-            "Firebase service-account file was not found."
-        )
-        return
-
-    try:
-        credential = credentials.Certificate(credentials_path)
-        firebase_admin.initialize_app(credential)
-
-        logger.info("Firebase Admin SDK initialized.")
-
-    except Exception:
-        logger.exception(
-            "Could not initialize Firebase Admin SDK."
-        )
+def initialize_firebase() -> bool:
+    with _initialization_lock:
+        if firebase_admin._apps:
+            return True
+        path = os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH')
+        if not path or not os.path.isfile(path):
+            return False
+        try:
+            firebase_admin.initialize_app(credentials.Certificate(path), options={'httpTimeout': 15})
+            return True
+        except Exception as error:
+            logger.warning('Firebase initialization failed: error_type=%s', type(error).__name__)
+            return False
 
 
-def send_briefing_notification(
-    token: str,
-    briefing_date: str,
-) -> bool:
-    """Send a push notification when a briefing is ready."""
-
-    initialize_firebase()
-
-    if not firebase_admin._apps:
-        logger.warning(
-            "Skipping push notification: Firebase is unavailable."
-        )
-        return False
-
+def send_briefing_notification(token: str, briefing_id: str, briefing_date: str,
+                               notification_id: str, ttl_seconds: int) -> str:
+    if not initialize_firebase():
+        return 'retry'
     message = messaging.Message(
         notification=messaging.Notification(
-            title="Your Morning Brief is ready! 🎧",
-            body="Your personalized Burmese news briefing is ready to listen.",
+            title='နေ့သစ် · သင့်သတင်းအနှစ်ချုပ် အသင့်ဖြစ်ပါပြီ',
+            body='သင်ရွေးချယ်ထားသော သတင်းများကို မိနစ်အနည်းငယ်ဖြင့် နားဆင်နိုင်ပါပြီ။',
         ),
         data={
-            "type": "briefing_ready",
-            "briefing_date": briefing_date,
+            'type': 'briefing_ready',
+            'briefing_id': briefing_id,
+            'briefing_date': briefing_date,
+            'notification_id': notification_id,
         },
         android=messaging.AndroidConfig(
-            priority="high",
+            priority='high', collapse_key=notification_id, ttl=ttl_seconds,
             notification=messaging.AndroidNotification(
-                channel_id="morning-brief",
-                sound="default",
+                channel_id='morning-brief', sound='default', tag=notification_id,
             ),
         ),
         token=token,
     )
-
     try:
         messaging.send(message)
+        return 'sent'
+    except messaging.UnregisteredError:
+        return 'invalid'
+    except Exception as error:
+        # Invalid payload/credentials/sender configuration must not deactivate a device.
+        logger.warning('FCM delivery failed: error_type=%s', type(error).__name__)
+        return 'retry'
 
-        logger.info(
-            "Briefing notification sent for %s.",
-            briefing_date,
-        )
 
-        return True
-
-    except Exception:
-        logger.exception(
-            "Failed to send briefing notification."
-        )
-        return False
+def send_breaking_news_notification(token: str, news_id: str, headline: str,
+                                    publisher: str, notification_id: str,
+                                    ttl_seconds: int) -> str:
+    if not initialize_firebase():
+        return 'retry'
+    message = messaging.Message(
+        notification=messaging.Notification(
+            title=f'လတ်တလော · {publisher[:60]}',
+            body=headline[:180],
+        ),
+        data={'type': 'breaking_news', 'article_id': news_id,
+              'notification_id': notification_id},
+        android=messaging.AndroidConfig(
+            priority='high', collapse_key=f'breaking-{news_id}', ttl=ttl_seconds,
+            notification=messaging.AndroidNotification(
+                channel_id='morning-brief', sound='default', tag=notification_id,
+            ),
+        ), token=token,
+    )
+    try:
+        messaging.send(message)
+        return 'sent'
+    except messaging.UnregisteredError:
+        return 'invalid'
+    except Exception as error:
+        logger.warning('Breaking-news FCM delivery failed: error_type=%s', type(error).__name__)
+        return 'retry'

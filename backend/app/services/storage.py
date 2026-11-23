@@ -1,4 +1,6 @@
 from pathlib import Path
+from uuid import UUID
+from app.services.account_deletion import account_is_active
 
 from app.lib.supabase import admin_supabase
 
@@ -11,6 +13,9 @@ def upload_briefing_audio(
     storage_path: str,
 ) -> str:
 
+    user_id = str(UUID(storage_path.split('/')[0]))
+    if not account_is_active(user_id):
+        raise RuntimeError("Account is unavailable")
     path = Path(file_path)
 
     if not path.exists():
@@ -32,6 +37,13 @@ def upload_briefing_audio(
         },
     )
 
+    try:
+        if not account_is_active(user_id):
+            raise RuntimeError("Account became unavailable during upload")
+    except Exception:
+        # Remove the newly uploaded object if deletion started or verification failed.
+        admin_supabase.storage.from_(BUCKET_NAME).remove([storage_path])
+        raise
     return storage_path
 
 
@@ -59,7 +71,7 @@ def create_briefing_signed_url(
 
     if not signed_url:
         raise RuntimeError(
-            f"Signed URL was not returned: {response}"
+            "Signed URL was not returned"
         )
 
     return signed_url
