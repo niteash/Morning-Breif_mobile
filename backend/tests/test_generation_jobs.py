@@ -9,9 +9,11 @@ from datetime import datetime, timezone
 
 CATEGORIES = [{"stories": [{"title": "News"}]}]
 
+
 @pytest.fixture(autouse=True)
 def staging_trial(monkeypatch):
     # These tests isolate generation coordination after a successful trial gate.
+    monkeypatch.setenv("BRIEFING_SOURCES_ENABLED", "false")
     monkeypatch.setattr(jobs, 'require_generation_access', lambda user_id: None)
     monkeypatch.setattr(jobs, 'generation_disabled', lambda: False)
 

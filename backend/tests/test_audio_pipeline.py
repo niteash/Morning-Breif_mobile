@@ -8,6 +8,11 @@ from app.services.tts.duration import audio_duration_seconds
 from app.services.ai import gemini
 
 
+@pytest.fixture(autouse=True)
+def use_mocked_script_generation_path(monkeypatch):
+    """Keep pipeline unit tests on the explicitly mocked generation path."""
+    monkeypatch.setenv("BRIEFING_SOURCES_ENABLED", "false")
+
 def mp3_bytes():
     # Valid MPEG-1 Layer III headers, 128 kbps, 44.1 kHz; silent payload fixture.
     return (bytes.fromhex("fffb9064") + bytes(413)) * 100
