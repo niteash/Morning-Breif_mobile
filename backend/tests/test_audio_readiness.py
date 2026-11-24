@@ -183,6 +183,15 @@ def test_unmapped_english_acronyms_are_spoken_as_myanmar_letter_names():
     assert 'အန် အေ အက်စ် အေ' in ssml
     assert 'BBC' not in ssml and 'NASA' not in ssml
 
+def test_azure_usd_currency_is_spoken_in_burmese():
+    ssml = azure.build_ssml(
+        'ကုမ္ပဏီ၏ ဝင်ငွေမှာ $1,250 ဖြစ်သည်။'
+    )
+
+    assert 'အမေရိကန်ဒေါ်လာ' in ssml
+    assert 'တစ်ထောင်နှစ်ရာငါးဆယ်' in ssml
+    assert '$1,250' not in ssml
+
 
 def test_bilingual_narration_prompt_is_written_for_spoken_delivery():
     prompt = gemini.build_prompt(selection())
@@ -246,6 +255,23 @@ def test_incomplete_or_blocked_narration_rejected(monkeypatch, reason):
         gemini._generate_with_model(gemini.PRIMARY_MODEL, 'fixture')
     assert client.models.generate_content.call_count == 1
 
+@pytest.mark.parametrize(
+    ('amount', 'expected'),
+    [
+        ('$0', 'အမေရိကန်ဒေါ်လာ သုည'),
+        ('$10', 'အမေရိကန်ဒေါ်လာ ဆယ်'),
+        ('$100', 'အမေရိကန်ဒေါ်လာ တစ်ရာ'),
+        ('$1,000', 'အမေရိကန်ဒေါ်လာ တစ်ထောင်'),
+        ('$9,999', 'အမေရိကန်ဒေါ်လာ ကိုးထောင်ကိုးရာကိုးဆယ်ကိုး'),
+        ('$12,500', '$12,500'),
+        ('$12.50', '$12.50'),
+        ('$1,25', '$1,25'),
+    ],
+)
+def test_azure_usd_currency_edge_cases(amount, expected):
+    ssml = azure.build_ssml(f'တန်ဖိုး {amount} ဖြစ်သည်။')
+    assert expected in ssml
+
 
 @pytest.mark.parametrize('patch,expected', [
     ({'AZURE_SPEECH_REGION': 'https://wrong.example'}, 'invalid_region_format'),
@@ -261,6 +287,44 @@ def test_provider_readiness_reports_categories_without_values(patch, expected):
     assert expected in errors
     assert 'fixture-key' not in str((missing, errors))
 
+
+@pytest.mark.parametrize(
+    ('amount', 'expected'),
+    [
+        (
+            '၁၅,၀၀၀ ကျပ်',
+            'တစ်သောင်းငါးထောင် ကျပ်',
+        ),
+        (
+            '၅၀၀ ကျပ်',
+            'ငါးရာ ကျပ်',
+        ),
+        (
+            '25,000 MMK',
+            'နှစ်သောင်းငါးထောင် ကျပ်',
+        ),
+    ],
+)
+def test_azure_mmk_currency_pronunciation(amount, expected):
+    ssml = azure.build_ssml(
+        f'ကုန်ကျစရိတ်မှာ {amount} ဖြစ်သည်။'
+    )
+    assert expected in ssml
+
+@pytest.mark.parametrize(
+    ('value', 'expected'),
+    [
+        ('50%', 'ငါးဆယ် ရာခိုင်နှုန်း'),
+        ('၁၅%', 'တစ်ဆယ့်ငါး ရာခိုင်နှုန်း'),
+        ('100%', 'တစ်ရာ ရာခိုင်နှုန်း'),
+        ('2.5%', 'နှစ် ဒသမ ငါး ရာခိုင်နှုန်း'),
+    ],
+)
+def test_azure_percentage_pronunciation(value, expected):
+    ssml = azure.build_ssml(
+        f'တိုးတက်မှုနှုန်းမှာ {value} ဖြစ်သည်။'
+    )
+    assert expected in ssml
 
 def test_missing_provider_file_reports_exact_required_names():
     missing, errors = runner().provider_readiness({})
@@ -290,3 +354,26 @@ def test_grounded_rehearsal_never_calls_real_providers(monkeypatch):
     assert result['status'] == 'ready'
     assert result['paid_calls'] == result['external_writes'] == 0
     assert result['owner_path_valid']
+
+
+@pytest.mark.parametrize(
+    'value',
+    [
+        '12.50%',
+        '12,500%',
+        '25,000 MMK',
+        '$12,500',
+        '$12.50',
+    ],
+)
+def test_azure_preserves_unsupported_financial_formats(value):
+    ssml = azure.build_ssml(f'တန်ဖိုး {value} ဖြစ်သည်။')
+
+    if value == '12.50%':
+        # Supported percentage decimals should be spoken.
+        assert 'တစ်ဆယ့်နှစ် ဒသမ ငါး သုည ရာခိုင်နှုန်း' in ssml
+    elif value == '25,000 MMK':
+        # Supported MMK amounts should be converted.
+        assert 'နှစ်သောင်းငါးထောင် ကျပ်' in ssml
+    else:
+        assert value in ssml
