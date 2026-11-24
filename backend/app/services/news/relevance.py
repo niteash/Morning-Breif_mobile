@@ -17,6 +17,43 @@ CATEGORY_ALIASES = {
 }
 
 
+MYANMAR_BURMESE_LOCATIONS = (
+    "မြန်မာ",
+    "မန္တလေး",
+    "ရန်ကုန်",
+    "နေပြည်တော်",
+    "စစ်ကိုင်း",
+    "ရှမ်းပြည်နယ်",
+    "ကချင်ပြည်နယ်",
+    "ရခိုင်ပြည်နယ်",
+    "ကရင်ပြည်နယ်",
+    "ချင်းပြည်နယ်",
+    "ဧရာဝတီ",
+    "တနင်္သာရီ",
+    "ပဲခူး",
+    "မကွေး",
+    "တောင်ကြီး",
+)
+
+
+MYANMAR_BURMESE_NEWS_EVENTS = (
+    "မိုးသည်းထန်",
+    "ရွာသွန်း",
+    "ရေကြီး",
+    "ငလျင်",
+    "မီးလောင်",
+    "တိုက်ပွဲ",
+    "ပစ်ခတ်",
+    "ဖမ်းဆီး",
+    "ရွေးကောက်ပွဲ",
+    "ဆန္ဒပြ",
+    "ထုတ်ပြန်",
+    "ကြေညာ",
+    "သေဆုံး",
+    "ဒဏ်ရာရ",
+    "ပြန်လည်ဖွင့်လှစ်",
+)
+
 CATEGORY_STRONG_KEYWORDS = {
     "tech": {
         "artificial intelligence",
@@ -397,6 +434,30 @@ def is_relevant(
         normalize_text(category),
         normalize_text(category),
     )
+
+
+
+    if category_slug == "myanmar" and title and title.strip():
+        headline = title.strip()
+
+        has_myanmar_location = any(
+            re.match(
+                rf"^{re.escape(location)}"
+                r"(?:မြို့|ပြည်နယ်|နိုင်ငံ)?"
+                r"(?:တွင်|၌|မှာ)",
+                headline,
+            )
+            for location in MYANMAR_BURMESE_LOCATIONS
+        )
+
+        has_news_event = any(
+            event in headline
+            for event in MYANMAR_BURMESE_NEWS_EVENTS
+        )
+
+        if has_myanmar_location and has_news_event:
+            return True
+
 
     title_text = normalize_text(title or "")
     description_text = normalize_text(description or "")

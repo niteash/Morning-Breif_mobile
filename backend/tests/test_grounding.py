@@ -111,3 +111,60 @@ def test_world_recognizes_cross_border_event_without_accepting_generic_scams():
     assert is_relevant('world', 'Ongoing demolition of scam hubs in Shwe Kokko Phase II crackdown',
                        'Working with neighbouring and regional countries to crack down on online scams.')
     assert not is_relevant('world', 'Five tips to avoid online scams', 'Stay safe when browsing.')
+
+
+def test_myanmar_relevance_accepts_burmese_headline():
+    from app.services.news.relevance import is_relevant
+
+    assert is_relevant(
+        "myanmar",
+        "မန္တလေးမြို့တွင် မိုးသည်းထန်စွာ ရွာသွန်း",
+        "မန္တလေးမြို့တွင် မိုးသည်းထန်စွာ ရွာသွန်းခဲ့သည်။",
+    )
+
+
+def test_myanmar_relevance_rejects_unrelated_burmese_headline():
+    from app.services.news.relevance import is_relevant
+
+    assert not is_relevant(
+        "myanmar",
+        "ဂျပန်နိုင်ငံတွင် နည်းပညာအသစ် မိတ်ဆက်",
+        "ဂျပန်ကုမ္ပဏီတစ်ခုက နည်းပညာအသစ်ကို မိတ်ဆက်ခဲ့သည်။",
+    )
+
+
+
+def test_myanmar_relevance_rejects_unrelated_story_with_location():
+    from app.services.news.relevance import is_relevant
+
+    assert not is_relevant(
+        "myanmar",
+        "ဂျပန်နိုင်ငံတွင် နည်းပညာအသစ် မိတ်ဆက်",
+        "ဂျပန်ကုမ္ပဏီတစ်ခုက နည်းပညာအသစ်ကို "
+        "မိတ်ဆက်ခဲ့ပြီး ရန်ကုန်မြို့ကိုလည်း ဖော်ပြခဲ့သည်။",
+    )
+
+
+
+def test_myanmar_relevance_rejects_unrelated_headline_with_location():
+    from app.services.news.relevance import is_relevant
+
+    assert not is_relevant(
+        "myanmar",
+        "ဂျပန်ကုမ္ပဏီက ရန်ကုန်အမည်ကို အသုံးပြုပြီး "
+        "တိုကျိုတွင် နည်းပညာအသစ် မိတ်ဆက်",
+        "ဂျပန်နိုင်ငံ တိုကျိုမြို့တွင် "
+        "နည်းပညာအသစ်တစ်ခု မိတ်ဆက်ခဲ့သည်။",
+    )
+
+
+def test_myanmar_relevance_rejects_foreign_event_with_myanmar_location():
+    from app.services.news.relevance import is_relevant
+
+    assert not is_relevant(
+        "myanmar",
+        "ဂျပန်ကုမ္ပဏီက ရန်ကုန်အမည်ပါသော "
+        "ထုတ်ကုန်သစ်ကို တိုကျိုတွင် ကြေညာ",
+        "ဂျပန်နိုင်ငံတွင် ထုတ်ကုန်သစ်တစ်ခု "
+        "မိတ်ဆက်ခဲ့ခြင်းဖြစ်သည်။",
+    )
