@@ -54,7 +54,16 @@ def select_publisher_balanced(clusters, limit, max_per_publisher=MAX_STORIES_PER
             deferred.append(story)
         if len(selected) >= limit:
             return selected
+
+    # Prefer publisher diversity, but use remaining eligible stories
+    # when the preferred per-publisher cap leaves unused slots.
+    remaining_slots = limit - len(selected)
+
+    if remaining_slots > 0:
+        selected.extend(deferred[:remaining_slots])
+
     return selected[:limit]
+
 
 
 # ============================================================

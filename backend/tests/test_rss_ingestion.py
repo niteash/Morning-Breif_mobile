@@ -508,8 +508,11 @@ def test_briefing_selection_caps_a_publisher_when_other_publishers_are_available
     clusters = [[{"source": source, "title": str(i)}] for i, source in enumerate(
         ["Publisher A"] * 4 + ["Publisher B", "Publisher C"])]
     selected = select_publisher_balanced(clusters, 5)
-    assert len(selected) == 4
-    assert sum(item["source"] == "Publisher A" for item in selected) == 2
+
+    assert len(selected) == 5
+    assert sum(item["source"] == "Publisher A" for item in selected) == 3
+    assert [item["title"] for item in selected] == ["0", "1", "4", "5", "2"]
+
     # The cap is a preference, not a hard availability rule.
     fallback = select_publisher_balanced(clusters[:3], 3)
     assert len(fallback) == 3
