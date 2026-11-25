@@ -8,8 +8,51 @@ CATEGORY_ALIASES = {
     "business": "business",
     "world": "world",
     "myanmar": "myanmar",
+    "crypto": "crypto",
+    "cryptocurrency": "crypto",
+    "psychology": "psychology",
+    "mental_health": "psychology",
+    "horoscope": "horoscope",
+    "astrology": "horoscope",
 }
 
+
+MYANMAR_BURMESE_LOCATIONS = (
+    "မြန်မာ",
+    "မန္တလေး",
+    "ရန်ကုန်",
+    "နေပြည်တော်",
+    "စစ်ကိုင်း",
+    "ရှမ်းပြည်နယ်",
+    "ကချင်ပြည်နယ်",
+    "ရခိုင်ပြည်နယ်",
+    "ကရင်ပြည်နယ်",
+    "ချင်းပြည်နယ်",
+    "ဧရာဝတီ",
+    "တနင်္သာရီ",
+    "ပဲခူး",
+    "မကွေး",
+    "တောင်ကြီး",
+)
+
+
+MYANMAR_BURMESE_NEWS_EVENTS = (
+    "မိုးသည်းထန်",
+    "ရွာသွန်း",
+    "ရေကြီး",
+    "ငလျင်",
+    "မီးလောင်",
+    "တိုက်ပွဲ",
+    "ပစ်ခတ်",
+    "ဖမ်းဆီး",
+    "ရွေးကောက်ပွဲ",
+    "ဆန္ဒပြ",
+    "ထုတ်ပြန်",
+    "ကြေညာ",
+    "သေဆုံး",
+    "ဒဏ်ရာရ",
+    "ပြန်လည်ဖွင့်လှစ်",
+)
 
 CATEGORY_STRONG_KEYWORDS = {
     "tech": {
@@ -126,6 +169,22 @@ CATEGORY_STRONG_KEYWORDS = {
         "mon state",
         "myanmar military",
     },
+    "crypto": {
+        "cryptocurrency", "bitcoin", "ethereum", "blockchain", "digital asset",
+        "stablecoin", "crypto exchange", "decentralized finance", "web3", "altcoin",
+        "crypto regulation", "bitcoin etf", "ethereum etf", "tokenized asset",
+    },
+    "psychology": {
+        "psychology", "psychological", "mental health", "behavioral science",
+        "cognitive science", "psychotherapy", "clinical psychology", "social psychology",
+        "child psychology", "personality disorder", "cognitive behavioral therapy",
+        "human behavior", "emotional wellbeing", "neuroscience research",
+    },
+    "horoscope": {
+        "horoscope", "astrology", "astrological", "zodiac", "birth chart",
+        "sun sign", "moon sign", "star sign", "planetary transit", "numerology",
+        "tarot", "vedic astrology", "daily prediction", "weekly prediction",
+    },
 }
 
 
@@ -230,6 +289,20 @@ CATEGORY_SUPPORTING_KEYWORDS = {
         "mon state",
         "ayeyarwady",
         "tanintharyi",
+    },
+    "crypto": {
+        "crypto", "token", "wallet", "mining", "defi", "nft", "ledger",
+        "coinbase", "binance", "solana", "xrp", "dogecoin", "digital currency",
+    },
+    "psychology": {
+        "brain", "behavior", "cognition", "emotion", "therapy", "therapist",
+        "anxiety", "depression", "stress", "wellbeing", "relationship", "memory",
+        "motivation", "personality", "mindfulness", "psychiatry", "research study",
+    },
+    "horoscope": {
+        "aries", "taurus", "gemini", "cancer", "leo", "virgo", "libra",
+        "scorpio", "sagittarius", "capricorn", "aquarius", "pisces",
+        "mercury retrograde", "venus", "mars", "jupiter", "saturn",
     },
 }
 
@@ -362,6 +435,30 @@ def is_relevant(
         normalize_text(category),
     )
 
+
+
+    if category_slug == "myanmar" and title and title.strip():
+        headline = title.strip()
+
+        has_myanmar_location = any(
+            re.match(
+                rf"^{re.escape(location)}"
+                r"(?:မြို့|ပြည်နယ်|နိုင်ငံ)?"
+                r"(?:တွင်|၌|မှာ)",
+                headline,
+            )
+            for location in MYANMAR_BURMESE_LOCATIONS
+        )
+
+        has_news_event = any(
+            event in headline
+            for event in MYANMAR_BURMESE_NEWS_EVENTS
+        )
+
+        if has_myanmar_location and has_news_event:
+            return True
+
+
     title_text = normalize_text(title or "")
     description_text = normalize_text(description or "")
 
@@ -493,6 +590,12 @@ def is_relevant(
     # For World news, recognize concrete international developments
     # even when the title does not contain an existing strong keyword.
     if category_slug == "world":
+        # Concrete cross-border enforcement is world news even when it also
+        # belongs to Myanmar/technology. Require BOTH scope and an event.
+        international_scope = re.search(r"\b(cross[- ]border|neighbouring (?:and regional )?countries|neighboring (?:and regional )?countries|international cooperation)\b", combined_text)
+        enforcement_event = re.search(r"\b(crackdown|crack down|extradition|trafficking arrests?|scam hubs?)\b", combined_text)
+        if international_scope and enforcement_event:
+            return True
         world_development_patterns = [
             r"\b(expels?|expelled|deports?|deported)\b",
             r"\b(diplomat|diplomats|diplomacy|diplomatic)\b",

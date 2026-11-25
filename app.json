@@ -21,7 +21,6 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
@@ -48,8 +47,22 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-audio",
-      "expo-asset"
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": true
+        }
+      ],
+      "expo-asset",
+      "expo-background-task",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Morning Brief to choose a profile photo."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

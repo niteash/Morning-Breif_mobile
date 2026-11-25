@@ -34,3 +34,23 @@ MYANMAR_FEED = (
     "+OR+Naypyidaw+OR+Rakhine+OR+Shan)"
     "&hl=en-US&gl=US&ceid=US:en"
 )
+
+CRYPTO_FEED = (
+    "https://news.google.com/rss/search"
+    "?q=(cryptocurrency+OR+bitcoin+OR+ethereum+OR+blockchain"
+    "+OR+stablecoin+OR+crypto+regulation)+when:2d"
+    "&hl=en-US&gl=US&ceid=US:en"
+)
+
+PSYCHOLOGY_FEED = (
+    "https://news.google.com/rss/search"
+    "?q=(psychology+OR+behavioral+science+OR+mental+health"
+    "+OR+cognitive+science+OR+psychology+research)+when:2d"
+    "&hl=en-US&gl=US&ceid=US:en"
+)
+
+HOROSCOPE_FEED = (
+    "https://news.google.com/rss/search"
+    "?q=(daily+horoscope+OR+weekly+horoscope+OR+astrology+OR+zodiac)+when:2d"
+    "&hl=en-IN&gl=IN&ceid=IN:en"
+)

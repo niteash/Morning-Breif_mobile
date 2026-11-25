@@ -1,4 +1,8 @@
+import type { SourceMetadata } from '../components/BriefingSources';
 import { apiRequest } from "../lib/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "../lib/supabase";
+import { createGenerationRequests } from "../lib/generationRequest";
 
 /* ========================================================= */
 /* STORY */
@@ -46,12 +50,13 @@ export type TodayBriefing = {
 /* ========================================================= */
 
 export type SavedBriefing = {
+  source_metadata?: SourceMetadata | null;
   id: string;
   user_id: string;
   briefing_date: string;
 
   title: string;
-  script: string;
+  script: string | null;
 
   audio_url: string | null;
   duration_seconds: number | null;
@@ -65,15 +70,22 @@ export type SavedBriefing = {
 
   created_at: string;
   updated_at: string;
+  target_minutes?: number | null;
+  chapters?: BriefingChapter[] | null;
+};
+
+export type BriefingChapter = {
+  id: string; type: 'category' | 'story'; title: string;
+  story_id?: string; category_name?: string | null; publisher?: string | null;
+  url?: string | null; image_url?: string | null; published_at?: string | null;
+  start_seconds: number; end_seconds: number;
 };
 
 /* ========================================================= */
 /* GENERATED BRIEFING */
 /* ========================================================= */
 
-export type GeneratedBriefing = SavedBriefing & {
-  categories: BriefingCategory[];
-};
+export type GeneratedBriefing = SavedBriefing;
 
 /* ========================================================= */
 /* GET TODAY'S STORY BRIEFING */
@@ -99,31 +111,50 @@ export async function getSavedTodayBriefing(): Promise<{
 /* GENERATE / REGENERATE AI BRIEFING */
 /* ========================================================= */
 
-export async function generateBriefing(): Promise<{
-  message: string;
-  briefing: GeneratedBriefing;
-}> {
-  /*
-   * Every generation gets a unique ID.
-   *
-   * This allows the backend/Gemini to know that
-   * the user requested a fresh regeneration.
-   */
+export type GenerationJob = {
+  id: string; user_id: string; briefing_date: string;
+  length: 'quick' | 'standard' | 'detailed';
+  state: 'queued' | 'selecting' | 'checking_sources' | 'writing' | 'synthesizing' | 'finalizing' | 'ready' | 'failed';
+  progress: number; message: string | null; error_code: string | null;
+  briefing_id: string | null; created_at: string; started_at: string | null;
+  finished_at: string | null; updated_at: string;
+};
+export type GenerationResponse = { request: GenerationJob };
 
-  const regenerationId = `${Date.now()}-${Math.random()
-    .toString(36)
-    .substring(2, 10)}`;
-
-  console.log("REGENERATION ID:", regenerationId);
-
-  return apiRequest("/api/v1/briefings/generate", {
+const generationLengths = new Map<string, 'quick' | 'standard' | 'detailed'>();
+const generateRequest = createGenerationRequests<GenerationResponse>(
+  AsyncStorage,
+  () => `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`,
+  (regenerationId, userId) => apiRequest("/api/v1/briefings/requests", {
     method: "POST",
+    body: JSON.stringify({ request_key: regenerationId, length: generationLengths.get(userId) ?? 'standard' }),
+  }, userId),
+);
 
-    body: JSON.stringify({
-      regeneration_id: regenerationId,
-    }),
-  }) as Promise<{
-    message: string;
-    briefing: GeneratedBriefing;
-  }>;
+export async function generateBriefing(length: 'quick' | 'standard' | 'detailed' = 'standard'): Promise<GenerationResponse> {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session || session.user.is_anonymous) throw new Error("Please sign in to continue.");
+  // The Supabase project identifies the data, even when a development tunnel changes.
+  const environment = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+  generationLengths.set(session.user.id, length);
+  try { return await generateRequest(environment, session.user.id); }
+  finally { generationLengths.delete(session.user.id); }
+}
+
+export function getGenerationRequest(id: string): Promise<GenerationResponse> {
+  return apiRequest(`/api/v1/briefings/requests/${encodeURIComponent(id)}`);
+}
+
+export type BriefingHistoryItem = Omit<SavedBriefing, 'script' | 'audio_url'>;
+export function getBriefingHistory(offset = 0): Promise<{ briefings: BriefingHistoryItem[]; next_offset: number | null }> {
+  return apiRequest(`/api/v1/briefings/history?offset=${offset}&limit=20`);
+}
+export function getHistoricalBriefing(id: string): Promise<{ briefing: SavedBriefing }> {
+  return apiRequest(`/api/v1/briefings/history/${encodeURIComponent(id)}`);
+}
+
+export function reportPronunciation(id: string, phrase: string, notes?: string): Promise<{ accepted: boolean; report_id: string | null }> {
+  return apiRequest(`/api/v1/briefings/${encodeURIComponent(id)}/pronunciation-reports`, {
+    method: 'POST', body: JSON.stringify({ phrase, notes: notes?.trim() || null }),
+  });
 }

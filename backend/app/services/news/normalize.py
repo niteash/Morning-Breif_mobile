@@ -136,6 +136,12 @@ def normalize_article(article: dict) -> dict:
         str(article.get("url") or "")
     )
     author = clean_text(article.get("author"))
+    image_url = canonicalize_url(
+        str(article.get("image_url") or "")
+    ) or None
+
+    if image_url and not image_url.lower().startswith(("http://", "https://")):
+        image_url = None
 
     return {
         "title": title,
@@ -143,6 +149,7 @@ def normalize_article(article: dict) -> dict:
         "url": url,
         "published_at": article.get("published_at"),
         "author": author,
+        "image_url": image_url,
         "content_hash": (
             create_content_hash(title, url)
             if title and url

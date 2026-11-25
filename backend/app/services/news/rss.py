@@ -9,6 +9,8 @@ from urllib.request import Request, urlopen
 import certifi
 import feedparser
 
+from .safe_rss import extract_feed_image
+
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 15
@@ -205,6 +207,7 @@ def fetch_rss_feed(feed_url: str) -> list[dict]:
             "url": url,
             "published_at": parse_published_date(entry),
             "author": entry.get("author"),
+            "image_url": extract_feed_image(entry),
         }
 
         articles.append(article)

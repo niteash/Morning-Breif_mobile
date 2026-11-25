@@ -1,3 +1,6 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from supabase import Client, create_client
 
 from app.config import (
@@ -26,6 +29,20 @@ def create_admin_supabase_client() -> Client:
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
     )
+
+
+@contextmanager
+def isolated_admin_supabase_client() -> Iterator[Client]:
+    """Provide a short-lived admin client for a background worker thread."""
+    client = create_admin_supabase_client()
+    try:
+        yield client
+    finally:
+        # Avoid creating unused connection pools while cleaning up.
+        postgrest = getattr(client, "_postgrest", None)
+        if postgrest is not None:
+            postgrest.aclose()
+        client.auth.close()
 
 
 supabase: Client = create_supabase_client()

@@ -1,85 +1,51 @@
 import { useEffect } from "react";
-import { Stack, router, usePathname } from "expo-router";
+import { Stack, router } from "expo-router";
 import * as Notifications from "expo-notifications";
+import { useFonts } from "expo-font";
+import { FontReadyContext } from "../components/ui/primitives";
+import { PreferencesProvider, usePalette, usePreferences } from '../features/preferences/PreferencesProvider';
+import { MotionProvider, useMotionReduced } from '../components/ui/Motion';
+import { StatusBar } from 'expo-status-bar';
+import { AuthFlowProvider } from '../features/auth/AuthFlowProvider';
+import { AdsProvider } from '../features/ads/AdsProvider';
+import { initializeAutoDownloadTask } from '../lib/autoDownloadTask';
 
-import { registerForPushNotifications } from "../lib/pushNotifications";
 
 export default function RootLayout() {
-  const pathname = usePathname();
-
-  // Register the device when the user enters the main app.
+  const [fontsLoaded] = useFonts({ Padauk: require('../../assets/fonts/Padauk-Regular.ttf'), PadaukBold: require('../../assets/fonts/Padauk-Bold.ttf') });
+  // Notification payloads carry an opaque briefing ID only; the authenticated
+  // historical endpoint validates ownership before playback fetches any audio.
   useEffect(() => {
-    const isMainScreen = pathname === "/home" || pathname === "/settings";
-
-    if (!isMainScreen) {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function registerDevice() {
-      try {
-        console.log("[FCM] Registration trigger reached.");
-
-        const token = await registerForPushNotifications();
-
-        if (cancelled) {
-          return;
-        }
-
-        console.log(
-          "[FCM] Registration finished.",
-          token ? "Token returned." : "No token returned.",
-        );
-      } catch (error) {
-        if (!cancelled) {
-          console.error("[FCM] Registration failed:", error);
-        }
-      }
-    }
-
-    void registerDevice();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [pathname]);
-
-  // Handle notifications received while the app is open.
+    void initializeAutoDownloadTask();
+  }, []);
   useEffect(() => {
-    const receivedSubscription = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        console.log(
-          "Notification received:",
-          notification.request.content.data,
-        );
-      },
-    );
-
-    // Handle notification taps.
-    const responseSubscription =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data;
-
-        console.log("Notification opened:", data);
-
-        if (data?.type === "briefing_ready") {
-          router.push("/home");
-        }
-      });
-
-    return () => {
-      receivedSubscription.remove();
-      responseSubscription.remove();
+    let lastHandled = '';
+    const openBriefing = (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+      const data = response?.notification.request.content.data;
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const briefingId = typeof data?.briefing_id === 'string' && uuid.test(data.briefing_id) ? data.briefing_id : null;
+      const articleId = typeof data?.article_id === 'string' && uuid.test(data.article_id) ? data.article_id : null;
+      if (data?.type !== 'briefing_ready' && data?.type !== 'breaking_news') return;
+      if ((data.type === 'briefing_ready' && !briefingId) || (data.type === 'breaking_news' && !articleId)) return;
+      const identity = `${response.actionIdentifier}:${response.notification.request.identifier}`;
+      if (identity === lastHandled) return;
+      lastHandled = identity;
+      if (briefingId) router.push(`/player?briefingId=${encodeURIComponent(briefingId)}`);
+      else if (articleId) router.push(`/article/${encodeURIComponent(articleId)}`);
+      void Notifications.clearLastNotificationResponseAsync().catch(() => {});
     };
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(openBriefing);
+    void Notifications.getLastNotificationResponseAsync().then(openBriefing).catch(() => {});
+    return () => responseSubscription.remove();
   }, []);
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: "slide_from_right",
-      }}
-    />
+    <PreferencesProvider><MotionProvider><FontReadyContext.Provider value={fontsLoaded}><AdsProvider><AuthFlowProvider><RootStack /></AuthFlowProvider></AdsProvider></FontReadyContext.Provider></MotionProvider></PreferencesProvider>
   );
+}
+
+function RootStack() {
+  const colors = usePalette(), { theme } = usePreferences(), reduced = useMotionReduced();
+  return <><StatusBar style={theme === 'dark' ? 'light' : 'dark'} /><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: reduced ? 'none' : 'slide_from_right' }} /></>;
 }

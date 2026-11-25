@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta, timezone
+import os
 
 from app.lib.supabase import create_supabase_client
 
 from .clustering import cluster_stories
 from .ranker import rank_candidates
 from .relevance import calculate_relevance_score, is_relevant
+from .personalization import interest_bonus
 
 
 # ============================================================
@@ -20,6 +22,48 @@ MAX_DATABASE_ROWS = 50
 MAX_RANKING_CANDIDATES = 20
 
 CLUSTER_SIMILARITY_THRESHOLD = 0.45
+MAX_STORIES_PER_PUBLISHER = 2
+
+
+def configured_story_limit():
+    """Bound server configuration; invalid configuration fails before provider work."""
+    value = int(os.getenv('BRIEFING_STORIES_PER_CATEGORY', '5'))
+    if not 1 <= value <= 10:
+        raise ValueError('BRIEFING_STORIES_PER_CATEGORY must be between 1 and 10')
+    return value
+
+
+def select_publisher_balanced(clusters, limit, max_per_publisher=MAX_STORIES_PER_PUBLISHER):
+    """Keep ranked cluster leaders while preferring more publisher variety."""
+    leaders = [
+        {**cluster[0], 'supporting_sources': [
+            {key: story.get(key) for key in ('id', 'category_id', 'title', 'description', 'source', 'url', 'image_url', 'published_at')}
+            for story in cluster[1:4]]}
+        for cluster in clusters if cluster
+    ]
+    distinct_publishers = {(story.get("source") or "unknown").casefold().strip() for story in leaders}
+    if len(distinct_publishers) <= 1:
+        return leaders[:limit]
+    selected, deferred, counts = [], [], {}
+    for story in leaders:
+        publisher = (story.get("source") or "unknown").casefold().strip()
+        if counts.get(publisher, 0) < max_per_publisher:
+            selected.append(story)
+            counts[publisher] = counts.get(publisher, 0) + 1
+        else:
+            deferred.append(story)
+        if len(selected) >= limit:
+            return selected
+
+    # Prefer publisher diversity, but use remaining eligible stories
+    # when the preferred per-publisher cap leaves unused slots.
+    remaining_slots = limit - len(selected)
+
+    if remaining_slots > 0:
+        selected.extend(deferred[:remaining_slots])
+
+    return selected[:limit]
+
 
 
 # ============================================================
@@ -29,16 +73,20 @@ CLUSTER_SIMILARITY_THRESHOLD = 0.45
 async def select_recent_stories(
     user_id: str,
     access_token: str,
-    stories_per_category: int = DEFAULT_STORIES_PER_CATEGORY,
+    stories_per_category: int | None = None,
     hours: int = DEFAULT_HOURS,
 ):
 
     print()
     print("========================================")
     print("SELECTING RECENT STORIES")
-    print("USER ID:", user_id)
+    print("USER ID: [redacted]")
     print("REQUESTED WINDOW:", hours, "hours")
     print("========================================")
+
+    stories_per_category = configured_story_limit() if stories_per_category is None else stories_per_category
+    if not 1 <= stories_per_category <= 10:
+        raise ValueError("Story limit must be between 1 and 10")
 
     # ========================================================
     # 1. SUPABASE CLIENT
@@ -47,6 +95,35 @@ async def select_recent_stories(
     supabase = create_supabase_client(
         access_token
     )
+
+    feedback_rows = []
+    try:
+        feedback_rows = (supabase.table('story_feedback')
+                         .select('story_id,action,news_items(category_id,source)')
+                         .eq('user_id', user_id).execute().data or [])
+    except Exception:
+        # Personalization is optional; a stale/missing preference must not make
+        # the core news feed unavailable.
+        feedback_rows = []
+    hidden_categories = {
+        str((row.get('news_items') or {}).get('category_id')) for row in feedback_rows
+        if row.get('action') == 'hide_topic'
+    }
+    hidden_publishers = {
+        str((row.get('news_items') or {}).get('source') or '').casefold().strip()
+        for row in feedback_rows if row.get('action') == 'hide_publisher'
+    }
+    story_preferences = {
+        str(row.get('story_id')): 18 if row.get('action') == 'more_like_this' else -18
+        for row in feedback_rows if row.get('action') in {'more_like_this', 'less_like_this'}
+    }
+    profile_preferences = {}
+    try:
+        rows = (supabase.table('profiles').select('horoscope_sign,crypto_watchlist')
+                .eq('id', user_id).limit(1).execute().data or [])
+        profile_preferences = rows[0] if rows else {}
+    except Exception:
+        profile_preferences = {}
 
     # ========================================================
     # 2. USER CATEGORIES
@@ -84,7 +161,7 @@ async def select_recent_stories(
 
         print()
         print("CATEGORY QUERY ERROR:")
-        print(str(error))
+        print(type(error).__name__)
 
         return []
 
@@ -225,6 +302,9 @@ async def select_recent_stories(
             "Unknown"
         )
 
+        if str(category_id) in hidden_categories:
+            continue
+
         print()
         print("========================================")
         print("PROCESSING CATEGORY")
@@ -310,9 +390,7 @@ async def select_recent_stories(
             print(
                 "NEWS QUERY ERROR:"
             )
-            print(
-                str(error)
-            )
+            print(type(error).__name__)
 
             results.append(
                 {
@@ -336,6 +414,9 @@ async def select_recent_stories(
         validated_stories = []
 
         for story in raw_stories:
+
+            if (story.get('source') or '').casefold().strip() in hidden_publishers:
+                continue
 
             title = (
                 story.get(
@@ -414,6 +495,10 @@ async def select_recent_stories(
 
             story["_relevance_score"] = (
                 relevance_score
+            )
+            story['_preference_score'] = (
+                story_preferences.get(str(story.get('id')), 0)
+                + interest_bonus(story, category_slug, profile_preferences)
             )
 
             validated_stories.append(
@@ -538,18 +623,11 @@ async def select_recent_stories(
             "SELECTING BEST STORY FROM EACH CLUSTER..."
         )
 
-        selected_stories = []
+        selected_stories = select_publisher_balanced(clusters, stories_per_category)
 
-        for cluster_index, cluster in enumerate(
-            clusters,
-            start=1,
-        ):
-
+        for cluster_index, cluster in enumerate(clusters, start=1):
             if not cluster:
                 continue
-
-            # Because candidates are already ranked,
-            # first story is the strongest story.
             best_story = cluster[0]
 
             # Remove internal score fields before returning.
@@ -561,10 +639,6 @@ async def select_recent_stories(
             best_story.pop(
                 "_score",
                 None,
-            )
-
-            selected_stories.append(
-                best_story
             )
 
             print()
@@ -598,11 +672,6 @@ async def select_recent_stories(
                 ),
             )
 
-            if (
-                len(selected_stories)
-                >= stories_per_category
-            ):
-                break
 
         # ====================================================
         # 11. FINAL CATEGORY RESULT

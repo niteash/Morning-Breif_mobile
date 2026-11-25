@@ -1,13 +1,3 @@
-from uuid import UUID
-
-CATEGORY_IDS = {
-    "technology": UUID("bd5d3262-e705-4595-859b-1b63e775e445"),
-    "business": UUID("0be82b81-4a28-4456-9c2f-83b185777846"),
-    "football": UUID("51d3202c-890e-4732-ab10-dbf7f3431d73"),
-    "world": UUID("b96b933b-7fa4-4bbd-ae82-2b653ffdc1bb"),
-    "myanmar": UUID("fc9d5cba-d415-4515-a2b5-b5d03d9d7666"),
-}
-
 NEWS_SOURCES = [
     # Technology
     {"name": "Hacker News", "url": "https://news.ycombinator.com/rss", "category": "technology"},
@@ -27,8 +17,22 @@ NEWS_SOURCES = [
 
     # Business and finance
     {"name": "Forbes Business", "url": "https://www.forbes.com/business/feed/", "category": "business"},
-    {"name": "CNBC Finance", "url": "https://www.cnbc.com/id/10000664/device/rss/rss.html", "category": "business"},
+    {"name": "BBC Business", "url": "https://feeds.bbci.co.uk/news/business/rss.xml", "category": "business"},
     {"name": "Nikkei Asia", "url": "https://asia.nikkei.com/rss/feed/nar", "category": "business"},
+
+    # Cryptocurrency and digital assets
+    {"name": "CoinDesk", "url": "https://www.coindesk.com/arc/outboundfeeds/rss/", "category": "crypto"},
+    {"name": "Cointelegraph", "url": "https://cointelegraph.com/rss", "category": "crypto"},
+    {"name": "Decrypt", "url": "https://decrypt.co/feed", "category": "crypto"},
+
+    # Psychology and behavioral science
+    {"name": "ScienceDaily Psychology", "url": "https://www.sciencedaily.com/rss/mind_brain/psychology.xml", "category": "psychology"},
+    {"name": "APA News", "url": "https://www.apa.org/news/apa/rss.xml", "category": "psychology"},
+    {"name": "APA PsycPORT", "url": "https://www.apa.org/news/psycport/psycport-rss.xml", "category": "psychology"},
+
+    # Horoscope and astrology (presented as entertainment, not factual advice)
+    {"name": "Hindustan Times Horoscope", "url": "https://www.hindustantimes.com/feeds/rss/astrology/horoscope/rssfeed.xml", "category": "horoscope"},
+    {"name": "Hindustan Times Astrology", "url": "https://www.hindustantimes.com/feeds/rss/astrology/rssfeed.xml", "category": "horoscope"},
 
     # Football
     {"name": "BBC Sport Football", "url": "https://feeds.bbci.co.uk/sport/football/rss.xml", "category": "football"},
