@@ -541,3 +541,28 @@ def test_news_api_orders_by_publication_with_deterministic_tie_breaker(monkeypat
         db.order.assert_any_call("id", desc=True)
     finally:
         app.dependency_overrides.clear()
+
+
+def test_operator_feeds_route_precedes_dynamic_article_route():
+    from fastapi.testclient import TestClient
+    from app.dependencies.operator import require_operator
+    from app.main import app
+    from app.services.news.sources import NEWS_SOURCES
+
+    app.dependency_overrides[require_operator] = lambda: {"operator": True}
+    try:
+        with TestClient(app) as client:
+            response = client.get("/api/v1/news/feeds")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["total_feeds"] == len(NEWS_SOURCES)
+        assert payload["feeds"] == [
+            {
+                "name": feed["name"],
+                "category": feed["category"],
+                "feed_url": feed["url"],
+            }
+            for feed in NEWS_SOURCES
+        ]
+    finally:
+        app.dependency_overrides.clear()
