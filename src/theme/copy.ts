@@ -47,6 +47,7 @@ export const english: Record<string, string> = {
   'အသံအနှစ်ချုပ် ပြင်ဆင်နေသည်':'Preparing audio briefing',
   'ကြာချိန်':'Elapsed', 'ပုံမှန်အားဖြင့် ၁–၃ မိနစ်ခန့် ကြာနိုင်ပါသည်။':'This usually takes about 1–3 minutes.',
   'အကျဉ်းချုပ် မရရှိပါ။ မူရင်းသတင်းကို ဖတ်ရှုပါ။':'No summary available. Read the original article at the publisher.',
+  'အတည်ပြုနိုင်သော သတင်းအချက်အလက် မလုံလောက်သောကြောင့် ဤအနှစ်ချုပ်သည် ရွေးထားသော ကြာချိန်ထက် တိုပါသည်။ အပိုအကြောင်းအရာ မဖြည့်ထားပါ။':'This briefing is shorter than your selected length because the verified source material was limited. No filler was added.',
   'သိမ်းဆည်းမရပါ။ ပြန်ကြိုးစားပါ။':'Could not save. Please try again.', 'သတင်းလင့်ခ် ဖွင့်မရပါ။ ပြန်ကြိုးစားပါ။':'Could not open the publisher link. Please try again.',
   'အချက်အလက် ရယူမရပါ။ အင်တာနက်ကို စစ်ပြီး ပြန်ကြိုးစားပါ။':'Could not load data. Check your connection and try again.',
   'သတင်းအားလုံး ဖတ်မယ်':'Browse all news', 'သတင်းကဏ္ဍ':'Categories', 'သင်ရွေးချယ်ထားသော ကဏ္ဍများ':'Your categories',

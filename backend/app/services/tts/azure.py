@@ -36,6 +36,17 @@ ENGLISH_PRONUNCIATIONS = {
     'Amazon': 'အမေဇွန်',
     'Netflix': 'နက်ဖလစ်',
     'AI': 'အေ အိုင်',
+    'BTC': 'ဘီ တီ စီ',
+    'Bitcoin': 'ဘစ်ကွိုင်',
+    'Ethereum': 'အီသာရီယမ်',
+    'CleanSpark': 'ကလင်း စပါ့ခ်',
+    'FTX': 'အက်ဖ် တီ အိတ်စ်',
+    'Glassnode': 'ဂလပ်စ်နုတ်',
+    '21Shares': 'တွမ်တီဝမ်း ရှယ်ယာစ်',
+    'Cointelegraph': 'ကွိုင်တယ်လီဂရပ်ဖ်',
+    'Decrypt': 'ဒီကရစ်ပ်',
+    'Coffee Expo Seoul': 'ကော်ဖီ အက်စ်ပို ဆိုးလ်',
+    'Global New Light of Myanmar': 'ဂလိုဘယ် နယူးလိုက် အော့ဖ် မြန်မာ',
 }
 LETTER_PRONUNCIATIONS = {
     'A': 'အေ', 'B': 'ဘီ', 'C': 'စီ', 'D': 'ဒီ', 'E': 'အီး', 'F': 'အက်ဖ်',
@@ -109,10 +120,10 @@ def _normalize_mmk_amounts(text: str) -> str:
         except (TypeError, ValueError):
             return original
 
-        if not 0 <= amount <= 99999:
+        if not 0 <= amount <= 999_999_999:
             return original
 
-        spoken = _burmese_integer_under_100000(amount)
+        spoken = _burmese_integer(amount)
         return spoken + ' ကျပ်'
 
     return MMK_AMOUNT.sub(replace, text)
@@ -147,10 +158,11 @@ def _normalize_percentages(text: str) -> str:
                 for char in match.group(1)
             ))
 
-            if whole > 9999:
+            if whole > 999_999_999:
                 return original
 
-            spoken = _spoken_percentage_integer(whole)
+            spoken = (_spoken_percentage_integer(whole)
+                      if whole <= 9999 else _burmese_integer(whole))
 
             fraction = match.group(2)
 
@@ -180,6 +192,7 @@ def _speech_pronunciation(value: str) -> str:
     value = _normalize_mmk_amounts(value)
     value = _normalize_usd_amounts(value)
     value = _normalize_percentages(value)
+    value = _normalize_plain_numbers(value)
     try:
         rows = (
             admin_supabase.table('pronunciation_lexicon')
@@ -263,10 +276,47 @@ def _burmese_integer_under_10000(number: int) -> str:
     return ''.join(parts)
 
 
+def _burmese_integer(number: int) -> str:
+    """Convert a whole number through 999,999,999 to Burmese speech."""
+    if not 0 <= number <= 999_999_999:
+        raise ValueError('Number outside supported range')
+    if number < 10_000:
+        return _burmese_integer_under_10000(number)
+    if number < 100_000:
+        ten_thousands, remainder = divmod(number, 10_000)
+        result = BURMESE_DIGITS[ten_thousands] + 'သောင်း'
+        return result + (_burmese_integer_under_10000(remainder) if remainder else '')
+    if number < 1_000_000:
+        hundred_thousands, remainder = divmod(number, 100_000)
+        result = BURMESE_DIGITS[hundred_thousands] + 'သိန်း'
+        return result + (_burmese_integer(remainder) if remainder else '')
+    millions, remainder = divmod(number, 1_000_000)
+    result = _burmese_integer(millions) + 'သန်း'
+    return result + (_burmese_integer(remainder) if remainder else '')
+
+
+def _parse_grouped_digits(value: str) -> int | None:
+    groups = value.split(',')
+    if len(groups) > 1 and (
+        not 1 <= len(groups[0]) <= 3
+        or any(len(group) != 3 for group in groups[1:])
+    ):
+        return None
+    try:
+        return int(''.join(str(unicodedata.digit(char))
+                           for char in value if char != ','))
+    except (TypeError, ValueError):
+        return None
+
+
+NUMBER_TEXT = r'[0-9၀-၉]+(?:,[0-9၀-၉]{3})*'
 USD_AMOUNT = re.compile(
-    r'(?<![\w$])\$\s*'
-    r'([1-9]\d{0,3}|[1-9]\d{0,2},\d{3}|0)'
-    r'(?![\d.,])'
+    rf'(?:(?<![\w$])(?:\$|USD|ဒေါ်လာ)\s*({NUMBER_TEXT})'
+    rf'(?:\.([0-9၀-၉]{{1,2}}))?(?![0-9၀-၉,.])'
+    rf'|(?<![\w])({NUMBER_TEXT})(?:\.([0-9၀-၉]{{1,2}}))?'
+    rf'(?![0-9၀-၉,.])\s*'
+    rf'(?:USD|ဒေါ်လာ)(?![A-Za-z0-9၀-၉\u1000-\u109F]))',
+    re.IGNORECASE,
 )
 
 
@@ -276,17 +326,49 @@ def _normalize_usd_amounts(text: str) -> str:
 
     def replace(match: re.Match) -> str:
         original = match.group(0)
-        amount = int(match.group(1).replace(',', ''))
+        digits = match.group(1) or match.group(3)
+        fraction = match.group(2) or match.group(4)
+        amount = _parse_grouped_digits(digits)
 
         # Unsupported values must not crash audio generation.
-        if not 0 <= amount <= 9999:
+        if amount is None or not 0 <= amount <= 999_999_999:
             return original
 
-        spoken = _burmese_integer_under_10000(amount)
+        spoken = _burmese_integer(amount)
+        if fraction:
+            spoken += ' ဒသမ ' + ' '.join(
+                BURMESE_DIGITS[unicodedata.digit(char)]
+                if unicodedata.digit(char) else 'သုည'
+                for char in fraction
+            )
 
         return 'အမေရိကန်ဒေါ်လာ ' + spoken
 
     return USD_AMOUNT.sub(replace, text)
+
+
+PLAIN_NUMBER = re.compile(
+    rf'(?<![\w,.])({NUMBER_TEXT})(?:\.([0-9၀-၉]{{1,3}}))?(?![\w,.%])'
+)
+
+
+def _normalize_plain_numbers(text: str) -> str:
+    """Speak remaining standalone dates, counts, and decimal values in Burmese."""
+    def replace(match: re.Match) -> str:
+        whole = _parse_grouped_digits(match.group(1))
+        if whole is None or whole > 999_999_999:
+            return match.group(0)
+        spoken = _burmese_integer(whole)
+        fraction = match.group(2)
+        if fraction:
+            spoken += ' ဒသမ ' + ' '.join(
+                BURMESE_DIGITS[unicodedata.digit(char)]
+                if unicodedata.digit(char) else 'သုည'
+                for char in fraction
+            )
+        return spoken
+
+    return PLAIN_NUMBER.sub(replace, text)
 
 def _escaped_paragraphs(value: str) -> list[str]:
     return [html.escape(part.strip()) for part in re.split(r'\n\s*\n+', value) if part.strip()]

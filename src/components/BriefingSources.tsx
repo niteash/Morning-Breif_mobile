@@ -4,7 +4,17 @@ import * as Linking from 'expo-linking';
 import { Panel, Type, Notice } from './ui/primitives';
 import { useCopy, usePalette } from '../features/preferences/PreferencesProvider';
 import { setBookmark, setStoryFeedback, type StoryFeedbackAction } from '../services/newsApi';
-export type SourceMetadata = { title: string; generated_at?: string; sections: { category_id: string; category_name: string; narration: string; source_ids?: string[]; sources: { id: string; title: string; source: string; url: string; image_url?: string | null; description?: string | null; published_at?: string | null }[] }[] };
+export type SourceMetadata = {
+  title: string;
+  generated_at?: string;
+  narration_quality?: {
+    status: 'target_estimate_met' | 'source_material_insufficient' | 'narration_below_supported_target';
+    target_seconds: number;
+    estimated_supported_seconds: number;
+    estimated_narration_seconds: number;
+  };
+  sections: { category_id: string; category_name: string; narration: string; source_ids?: string[]; sources: { id: string; title: string; source: string; url: string; image_url?: string | null; description?: string | null; published_at?: string | null }[] }[];
+};
 export function BriefingSources({ metadata, dataSaver = false }: { metadata?: SourceMetadata | null; dataSaver?: boolean }) {
   const colors = usePalette(), t = useCopy();
   const { width } = useWindowDimensions();
@@ -35,6 +45,9 @@ export function BriefingSources({ metadata, dataSaver = false }: { metadata?: So
       <Type variant="title">သတင်းအရင်းအမြစ်များ</Type>
       <Type variant="muted">AI ဖြင့် ရေးသားထားသော အနှစ်ချုပ် · နောက်ဆုံးစစ်ဆေးချိန် {metadata?.generated_at?.slice(0, 16).replace('T', ' ') || 'မရရှိပါ'}</Type>
     </View>
+    {metadata?.narration_quality?.status === 'source_material_insufficient'
+      ? <Notice message="အတည်ပြုနိုင်သော သတင်းအချက်အလက် မလုံလောက်သောကြောင့် ဤအနှစ်ချုပ်သည် ရွေးထားသော ကြာချိန်ထက် တိုပါသည်။ အပိုအကြောင်းအရာ မဖြည့်ထားပါ။" />
+      : null}
     <Notice message={error} />
     {!metadata?.sections?.length ? <Type variant="muted">ဤအနှစ်ချုပ်တွင် အရင်းအမြစ်မှတ်တမ်း မရရှိပါ။</Type> : metadata.sections.map((section, index) => {
       const sources = section.sources.filter(source => { if (seen.has(source.id)) return false; seen.add(source.id); return true; });

@@ -89,6 +89,28 @@ def test_nonempty_selected_categories_cannot_be_silently_omitted():
         validate_grounded_result(result(), batch)
 
 
+def test_selected_story_cannot_be_silently_omitted_from_category():
+    batch = data()
+    batch[0]['stories'].append({
+        'id': 'second-article', 'title': 'Second report', 'source': 'Publisher',
+        'url': 'https://example.org/second',
+    })
+    with pytest.raises(ValueError, match='story coverage'):
+        validate_grounded_result(result(), batch)
+
+
+def test_story_narrations_must_match_trusted_source_order_and_assembled_text():
+    value = result()
+    value['sections'][0]['story_narrations'] = [{
+        'source_id': 'article', 'narration': 'မြန်မာသတင်း',
+    }]
+    saved = validate_grounded_result(value, data())
+    assert saved['sections'][0]['story_narrations'][0]['source_id'] == 'article'
+    value['sections'][0]['story_narrations'][0]['source_id'] = 'invented'
+    with pytest.raises(ValueError, match='story narration coverage'):
+        validate_grounded_result(value, data())
+
+
 def test_empty_selected_category_needs_no_invented_story():
     batch = data(); batch.append({'category': {'id': 'empty'}, 'stories': []})
     assert len(validate_grounded_result(result(), batch)['sections']) == 1

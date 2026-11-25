@@ -5,6 +5,7 @@ from uuid import uuid4
 from uuid import UUID
 from datetime import date as calendar_date
 import os
+import logging
 
 from app.services.ai.gemini import generate_briefing_script
 from app.services.storage import upload_briefing_audio
@@ -13,6 +14,10 @@ from app.services.tts.duration import audio_duration_seconds
 
 
 from app.services.briefing.validation import validate_script
+from app.services.briefing.quality import evaluate_narration
+
+
+logger = logging.getLogger(__name__)
 
 
 class PipelineStageError(RuntimeError):
@@ -63,6 +68,23 @@ def generate_combined_audio(user_id: str, date: str, categories: list[dict],
                                                target_minutes=target_minutes)),
         )
     script = _run_stage("script_validation", lambda: validate_script(script))
+    quality = _run_stage(
+        "narration_quality",
+        lambda: evaluate_narration(script, categories, target_minutes),
+    )
+    if quality['status'] == 'narration_below_supported_target':
+        raise PipelineStageError(
+            'narration_quality',
+            RuntimeError('Narration is shorter than the supplied reporting supports'),
+        )
+    if quality['status'] == 'source_material_insufficient':
+        logger.warning(
+            'Briefing source material is insufficient for requested duration: '
+            'target_seconds=%s supported_seconds=%s',
+            quality['target_seconds'], quality['estimated_supported_seconds'],
+        )
+    if metadata is not None:
+        metadata['narration_quality'] = quality
     # Unique storage objects prevent overlapping attempts from overwriting audio
     # referenced by an already-saved briefing. DB generation fencing is still needed.
     storage_path = f"{user_id}/{date}/{uuid4()}.mp3"

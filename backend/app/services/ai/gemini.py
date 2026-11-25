@@ -23,6 +23,7 @@ def _get_client():
 PRIMARY_MODEL = "gemini-2.5-flash"
 FALLBACK_MODEL = "gemini-2.5-flash-lite"
 MAX_NEWS_TEXT_CHARACTERS = 20_000
+MAX_OUTPUT_TOKENS = 8192
 
 
 def build_news_text(categories: list[dict]) -> str:
@@ -93,6 +94,25 @@ def build_prompt(
     target_minutes: int = 7,
 ) -> str:
     news_text = build_news_text(categories)
+    from app.services.briefing.quality import assess_source_material, target_character_range
+    source_assessment = assess_source_material(categories, target_minutes)
+    minimum_characters, maximum_characters = target_character_range(target_minutes)
+
+    if source_assessment['sufficient_for_target']:
+        length_instruction = f"""
+The supplied excerpts appear capable of supporting the requested length.
+Aim for {minimum_characters} to {maximum_characters} Burmese narration characters.
+This is a planning range, never permission to repeat or add unsupported detail.
+"""
+    else:
+        length_instruction = f"""
+SOURCE-LENGTH LIMIT
+The supplied titles and excerpts support only about
+{source_assessment['estimated_supported_seconds']} seconds of careful narration,
+below the {source_assessment['target_seconds']}-second request.
+Write the most complete supported briefing and stop. Do not pad, repeat, infer,
+or invent facts. The application will explicitly report the source shortfall.
+"""
 
     regeneration_instruction = ""
 
@@ -116,9 +136,12 @@ written for a professional morning newsreader.
 TARGET LENGTH
 Aim for approximately {target_minutes} minutes of natural spoken narration,
 but only when the supplied reporting contains enough verified information.
+{length_instruction}
 
 EDITORIAL DEPTH
 - Cover every selected story with meaningful factual detail.
+- Produce a distinct story-level narration for every selected article, in the
+  exact supplied order. Do not merge separate stories into a single sentence.
 - For each story, explain the main event, the people or organizations involved,
   the reported location, timing, and significance when explicitly supported.
 - Use several short, natural Burmese sentences when enough facts are available,
@@ -126,6 +149,8 @@ EDITORIAL DEPTH
 - Attribute reported claims to their publishers.
 - Connect related facts naturally, without repeating information.
 - Use brief, professional transitions between stories and categories.
+- A detailed excerpt should normally receive three to six short sentences.
+  A short excerpt or headline may receive only one or two supported sentences.
 - When descriptions are incomplete or only a headline is available,
   summarize only what is supported and move to the next story.
 - Never invent background, causes, consequences, figures, quotes, or context.
@@ -194,7 +219,7 @@ def _generate_with_model(
             config=types.GenerateContentConfig(
                 response_mime_type='application/json' if structured else 'text/plain',
                 response_json_schema=response_json_schema,
-                max_output_tokens=4096,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(
                     disable=True,
@@ -283,6 +308,7 @@ def generate_briefing_script(
 
 def grounded_response_schema(categories):
     section_count = sum(1 for group in categories if group.get('stories'))
+    story_count = sum(len(group.get('stories') or []) for group in categories)
     if not section_count:
         raise ValueError('No grounded sections available')
     return {
@@ -290,12 +316,21 @@ def grounded_response_schema(categories):
         'additionalProperties': False,
         'properties': {
             'title': {'type': 'string'},
-            'narrations': {
+            'opening': {'type': 'string'},
+            'category_introductions': {
                 'type': 'array', 'items': {'type': 'string'},
                 'minItems': section_count, 'maxItems': section_count,
             },
+            'story_narrations': {
+                'type': 'array', 'items': {'type': 'string'},
+                'minItems': story_count, 'maxItems': story_count,
+            },
+            'closing': {'type': 'string'},
         },
-        'required': ['title', 'narrations'],
+        'required': [
+            'title', 'opening', 'category_introductions',
+            'story_narrations', 'closing',
+        ],
     }
 
 
@@ -304,7 +339,13 @@ def generate_grounded_briefing(categories, day, target_minutes=7):
     from app.services.briefing.grounding import validate_grounded_result
     prompt = build_prompt(categories, target_minutes=target_minutes) + '\nBriefing local date: ' + day
     usable_groups = [group for group in categories if group.get('stories')]
-    prompt += '\nReturn the structured response required by the supplied schema. The narrations array must contain exactly one Burmese narration for every listed category, in the exact listed order. Cover the supplied articles for that category. Include a concise greeting and date only in the first narration and the closing only in the last narration.'
+    prompt += ('\nReturn the structured response required by the supplied schema. '
+               'The opening must contain only the concise greeting and date. '
+               'The category_introductions array must contain one brief natural transition '
+               'for each listed category in exact order and must add no news facts. '
+               'The story_narrations array must contain one source-grounded Burmese narration '
+               'for every listed article in exact order. Each item may use facts only from its '
+               'corresponding article. The closing must contain only a short friendly sign-off.')
     prompt += '\nOrdered categories and selected articles: ' + json.dumps([
         {'category': g['category'].get('name_my') or g['category'].get('name_en'),
          'articles': [s['title'] for s in g['stories']]}
@@ -318,25 +359,43 @@ def generate_grounded_briefing(categories, day, target_minutes=7):
     )
     try:
         data = json.loads(raw)
-        narrations = data.get('narrations') if isinstance(data, dict) else None
-        if (not isinstance(narrations, list) or len(narrations) != len(usable_groups)
-                or any(not isinstance(narration, str) or not narration.strip()
-                       for narration in narrations)):
+        introductions = data.get('category_introductions') if isinstance(data, dict) else None
+        story_narrations = data.get('story_narrations') if isinstance(data, dict) else None
+        expected_story_count = sum(len(group['stories']) for group in usable_groups)
+        if (not isinstance(introductions, list) or len(introductions) != len(usable_groups)
+                or not isinstance(story_narrations, list)
+                or len(story_narrations) != expected_story_count
+                or any(not isinstance(item, str) or not item.strip()
+                       for item in introductions + story_narrations)
+                or not isinstance(data.get('opening'), str) or not data['opening'].strip()
+                or not isinstance(data.get('closing'), str) or not data['closing'].strip()):
             raise ValueError('Missing grounded sections')
         # Category and source identities always come from the trusted selection,
         # never from model output. This prevents formatting mistakes or invented
         # IDs from breaking an otherwise usable narration.
-        grounded = {
-            'title': data.get('title'),
-            'sections': [
-                {
-                    'category_id': group['category']['id'],
-                    'source_ids': [story['id'] for story in group['stories']],
-                    'narration': narration,
-                }
-                for group, narration in zip(usable_groups, narrations)
-            ],
-        }
+        sections = []
+        cursor = 0
+        for index, group in enumerate(usable_groups):
+            count = len(group['stories'])
+            per_story = story_narrations[cursor:cursor + count]
+            cursor += count
+            parts = []
+            if index == 0:
+                parts.append(data['opening'].strip())
+            parts.append(introductions[index].strip())
+            parts.extend(item.strip() for item in per_story)
+            if index == len(usable_groups) - 1:
+                parts.append(data['closing'].strip())
+            sections.append({
+                'category_id': group['category']['id'],
+                'source_ids': [story['id'] for story in group['stories']],
+                'narration': '\n\n'.join(parts),
+                'story_narrations': [
+                    {'source_id': story['id'], 'narration': narration.strip()}
+                    for story, narration in zip(group['stories'], per_story)
+                ],
+            })
+        grounded = {'title': data.get('title'), 'sections': sections}
         validated = validate_grounded_result(grounded, categories)
         from datetime import datetime, timezone
         validated.update(briefing_date=day, generated_at=datetime.now(timezone.utc).isoformat(),
@@ -348,7 +407,8 @@ def generate_grounded_briefing(categories, day, target_minutes=7):
             'Missing briefing title', 'Missing grounded sections', 'Grounded result exceeds limits',
             'Invalid grounded section', 'Unknown source reference', 'Source category mismatch',
             'Missing source attribution', 'Missing or unsafe publisher URL', 'Invalid supporting source',
-            'Missing selected category coverage',
+            'Missing selected category coverage', 'Missing selected story coverage',
+            'Invalid story narration coverage',
         }
         logger.warning('Grounded narration validation failed: category=%s',
                        reason if reason in allowed else type(error).__name__)

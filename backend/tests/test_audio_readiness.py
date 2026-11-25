@@ -117,21 +117,23 @@ def test_sdk_retry_limit_and_generation_budget(monkeypatch):
         assert gemini._generate_with_model(gemini.PRIMARY_MODEL, 'prompt') == 'မြန်မာသတင်း'
         assert constructor.call_args.kwargs['http_options'].retry_options.attempts == 1
         config = client.models.generate_content.call_args.kwargs['config']
-        assert config.max_output_tokens == 4096
+        assert config.max_output_tokens == 8192
         assert config.thinking_config.thinking_budget == 0
     finally: gemini._get_client.cache_clear()
 
 
-def test_grounded_schema_locks_narration_count():
+def test_grounded_schema_locks_category_and_story_narration_counts():
     second_category = '22222222-2222-4222-8222-222222222222'
     categories = selection() + [{
         'category': {'id': second_category, 'name_my': 'ကမ္ဘာ'},
         'stories': [{'id': '33333333-3333-4333-8333-333333333333', 'title': 'World story'}],
     }]
     schema = gemini.grounded_response_schema(categories)
-    narrations = schema['properties']['narrations']
-    assert narrations['minItems'] == narrations['maxItems'] == 2
-    assert narrations['items'] == {'type': 'string'}
+    introductions = schema['properties']['category_introductions']
+    stories = schema['properties']['story_narrations']
+    assert introductions['minItems'] == introductions['maxItems'] == 2
+    assert stories['minItems'] == stories['maxItems'] == 2
+    assert stories['items'] == {'type': 'string'}
 
 
 def test_structured_generation_passes_json_schema_to_sdk(monkeypatch):
@@ -263,8 +265,8 @@ def test_incomplete_or_blocked_narration_rejected(monkeypatch, reason):
         ('$100', 'အမေရိကန်ဒေါ်လာ တစ်ရာ'),
         ('$1,000', 'အမေရိကန်ဒေါ်လာ တစ်ထောင်'),
         ('$9,999', 'အမေရိကန်ဒေါ်လာ ကိုးထောင်ကိုးရာကိုးဆယ်ကိုး'),
-        ('$12,500', '$12,500'),
-        ('$12.50', '$12.50'),
+        ('$12,500', 'အမေရိကန်ဒေါ်လာ တစ်သောင်းနှစ်ထောင်ငါးရာ'),
+        ('$12.50', 'အမေရိကန်ဒေါ်လာ ဆယ်နှစ် ဒသမ ငါး သုည'),
         ('$1,25', '$1,25'),
     ],
 )
@@ -362,8 +364,6 @@ def test_grounded_rehearsal_never_calls_real_providers(monkeypatch):
         '12.50%',
         '12,500%',
         '25,000 MMK',
-        '$12,500',
-        '$12.50',
     ],
 )
 def test_azure_preserves_unsupported_financial_formats(value):

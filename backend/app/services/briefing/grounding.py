@@ -28,14 +28,17 @@ def validate_grounded_result(result, categories):
     if len(result['title']) > 240 or len(sections) > 50:
         raise ValueError('Grounded result exceeds limits')
     normalized = []
+    referenced_ids = []
     for section in sections:
         if not isinstance(section, dict):
             raise ValueError('Invalid grounded section')
         ids = section.get('source_ids')
         if not isinstance(ids, list) or not ids or any(not isinstance(i, str) or i not in selected for i in ids):
             raise ValueError('Unknown source reference')
+        ids = list(dict.fromkeys(ids))
+        referenced_ids.extend(ids)
         sources = []
-        for identity in dict.fromkeys(ids):
+        for identity in ids:
             category, story = selected[identity]
             if section.get('category_id') != category['id']:
                 raise ValueError('Source category mismatch')
@@ -65,11 +68,34 @@ def validate_grounded_result(result, categories):
         narration = section.get('narration')
         if not isinstance(narration, str) or not narration.strip() or len(narration) > 12_000:
             raise ValueError('Invalid grounded section')
+        story_narrations = section.get('story_narrations')
+        normalized_story_narrations = []
+        if story_narrations is not None:
+            if (not isinstance(story_narrations, list)
+                    or len(story_narrations) != len(ids)):
+                raise ValueError('Invalid story narration coverage')
+            for expected_id, item in zip(ids, story_narrations):
+                if (not isinstance(item, dict) or item.get('source_id') != expected_id
+                        or not isinstance(item.get('narration'), str)
+                        or not item['narration'].strip()
+                        or item['narration'].strip() not in narration):
+                    raise ValueError('Invalid story narration coverage')
+                normalized_story_narrations.append({
+                    'source_id': expected_id,
+                    'narration': item['narration'].strip(),
+                })
         normalized.append({'category_id': section['category_id'], 'category_name': category.get('name_my') or category.get('name_en'),
-                           'narration': narration.strip(), 'source_ids': list(dict.fromkeys(ids)), 'sources': sources})
+                           'narration': narration.strip(), 'source_ids': ids, 'sources': sources,
+                           **({'story_narrations': normalized_story_narrations}
+                              if story_narrations is not None else {})})
     expected = {g['category']['id'] for g in categories if g['stories']}
     if {section['category_id'] for section in normalized} != expected:
         raise ValueError('Missing selected category coverage')
+    expected_story_ids = {
+        story['id'] for group in categories for story in group.get('stories', [])
+    }
+    if set(referenced_ids) != expected_story_ids or len(referenced_ids) != len(expected_story_ids):
+        raise ValueError('Missing selected story coverage')
     # Narration is assembled ONLY from validated sections; no separate ungrounded script.
     return {'title': result['title'].strip(), 'sections': normalized,
             'script': validate_script('\n\n'.join(section['narration'] for section in normalized))}
