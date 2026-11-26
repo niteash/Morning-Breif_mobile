@@ -37,11 +37,45 @@ def validate_selection(categories, now=None):
 
 
 def batch_digest(categories):
-    # Only provider input and article identity; ignore volatile selector scores.
-    reviewed = [{'category': g['category'], 'stories': [
-        {k: s.get(k) for k in ('id', 'category_id', 'title', 'description', 'source', 'url', 'published_at', 'supporting_sources')}
-        for s in g['stories']]} for g in categories]
-    return hashlib.sha256(json.dumps(reviewed, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    """Hash a canonical provider selection, ignoring volatile rank scores."""
+    story_fields = (
+        'id', 'category_id', 'title', 'description', 'source', 'url',
+        'image_url', 'published_at',
+    )
+
+    def story_identity(story):
+        return (
+            str(story.get('id') or ''),
+            str(story.get('url') or ''),
+            str(story.get('title') or ''),
+        )
+
+    reviewed = []
+    for group in categories:
+        category = dict(group.get('category') or {})
+        stories = []
+        for source_story in sorted(group.get('stories') or [], key=story_identity):
+            story = {key: source_story.get(key) for key in story_fields}
+            story['supporting_sources'] = [
+                {key: supporting.get(key) for key in story_fields}
+                for supporting in sorted(
+                    source_story.get('supporting_sources') or [],
+                    key=story_identity,
+                )
+            ]
+            stories.append(story)
+        reviewed.append({'category': category, 'stories': stories})
+    reviewed.sort(key=lambda group: (
+        str(group['category'].get('slug') or ''),
+        str(group['category'].get('id') or ''),
+    ))
+    canonical = json.dumps(
+        reviewed,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(',', ':'),
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def mock_rehearsal(user_id, day, categories):

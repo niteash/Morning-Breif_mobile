@@ -270,6 +270,22 @@ def calculate_story_score(
     return score
 
 
+def _stable_rank_key(story: dict[str, Any]) -> tuple:
+    """Total ordering for equal-scored stories and repeated rehearsals."""
+    published = _parse_timestamp(story.get("published_at"))
+    published_epoch = published.timestamp() if published else 0.0
+    description = re.sub(r"\s+", " ", str(story.get("description") or "")).strip()
+    return (
+        -float(story.get("_score") or 0),
+        -published_epoch,
+        -len(description),
+        extract_publisher(story),
+        normalize_text(story.get("title") or ""),
+        str(story.get("id") or ""),
+        str(story.get("url") or ""),
+    )
+
+
 def _deduplicate_exact_titles(
     stories: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -344,6 +360,7 @@ def rank_stories(
         return []
 
     ranked_stories = []
+    ranking_time = now or datetime.now(timezone.utc)
 
     for original_story in stories:
         story = dict(original_story)
@@ -351,15 +368,12 @@ def rank_stories(
         story["_score"] = calculate_story_score(
             story,
             category_slug=category_slug,
-            now=now,
+            now=ranking_time,
         )
 
         ranked_stories.append(story)
 
-    ranked_stories.sort(
-        key=lambda item: item["_score"],
-        reverse=True,
-    )
+    ranked_stories.sort(key=_stable_rank_key)
 
     ranked_stories = _deduplicate_exact_titles(ranked_stories)
 
@@ -394,6 +408,7 @@ def rank_candidates(
         return []
 
     ranked_stories = []
+    ranking_time = now or datetime.now(timezone.utc)
 
     for original_story in stories:
         story = dict(original_story)
@@ -401,15 +416,12 @@ def rank_candidates(
         story["_score"] = calculate_story_score(
             story,
             category_slug=category_slug,
-            now=now,
+            now=ranking_time,
         )
 
         ranked_stories.append(story)
 
-    ranked_stories.sort(
-        key=lambda item: item["_score"],
-        reverse=True,
-    )
+    ranked_stories.sort(key=_stable_rank_key)
 
     ranked_stories = _deduplicate_exact_titles(ranked_stories)
 

@@ -13,7 +13,12 @@ from app.services.news.batch import IngestionBusy, run_ingestion_batch
 from app.services.news.relevance import is_relevant
 from app.services.news.ranker import rank_candidates
 from app.services.news.clustering import cluster_stories
-from app.services.news.selector import configured_story_limit, select_publisher_balanced
+from app.services.news.selector import (
+    configured_story_limit,
+    select_publisher_balanced,
+    stable_categories,
+    story_feedback_scores,
+)
 from app.services.news.personalization import interest_bonus
 from app.services.notification_delivery import deliver_all_notifications
 from app.services.account_deletion import process_account_deletions
@@ -93,10 +98,14 @@ def select_user_categories(user_id: str) -> list[dict]:
                 item for item in category if isinstance(item, dict)
             )
 
-    return categories
+    return stable_categories(categories)
 
 
-def select_recent_news(category: dict, preferences: dict | None = None) -> list[dict]:
+def select_recent_news(
+    category: dict,
+    preferences: dict | None = None,
+    now: datetime | None = None,
+) -> list[dict]:
     """Fetch, filter, rank, and deduplicate recent stories."""
 
     category_id = category.get("id")
@@ -105,18 +114,20 @@ def select_recent_news(category: dict, preferences: dict | None = None) -> list[
     if not category_id:
         return []
 
-    cutoff = (
-        datetime.now(timezone.utc)
-        - timedelta(hours=NEWS_LOOKBACK_HOURS)
-    ).isoformat()
+    evaluation_time = now or datetime.now(timezone.utc)
+    if evaluation_time.tzinfo is None or evaluation_time.utcoffset() is None:
+        raise ValueError("Selection evaluation timestamp must include a timezone")
+    evaluation_time = evaluation_time.astimezone(timezone.utc)
+    cutoff = (evaluation_time - timedelta(hours=NEWS_LOOKBACK_HOURS)).isoformat()
 
     response = (
         admin_supabase.table("news_items")
         .select("*")
         .eq("category_id", category_id)
         .gte("published_at", cutoff)
-        .lte("published_at", datetime.now(timezone.utc).isoformat())
+        .lte("published_at", evaluation_time.isoformat())
         .order("published_at", desc=True)
+        .order("id", desc=False)
         .limit(MAX_DATABASE_ROWS)
         .execute()
     )
@@ -152,6 +163,7 @@ def select_recent_news(category: dict, preferences: dict | None = None) -> list[
         candidates,
         category_slug=category_slug,
         limit=MAX_RANKING_CANDIDATES,
+        now=evaluation_time,
     )
 
     clusters = cluster_stories(
@@ -162,10 +174,14 @@ def select_recent_news(category: dict, preferences: dict | None = None) -> list[
     return select_publisher_balanced(clusters, configured_story_limit())
 
 
-def collect_user_news(user_id: str) -> list[dict]:
+def collect_user_news(user_id: str, now: datetime | None = None) -> list[dict]:
     """Build one combined briefing from the user's selected categories."""
 
     categories = select_user_categories(user_id)
+    evaluation_time = now or datetime.now(timezone.utc)
+    if evaluation_time.tzinfo is None or evaluation_time.utcoffset() is None:
+        raise ValueError("Selection evaluation timestamp must include a timezone")
+    evaluation_time = evaluation_time.astimezone(timezone.utc)
 
     if not categories:
         logger.info(
@@ -183,21 +199,20 @@ def collect_user_news(user_id: str) -> list[dict]:
         rows = (admin_supabase.table('story_feedback')
                 .select('story_id,action,news_items(category_id,source)')
                 .eq('user_id', user_id).execute().data or [])
+        preferences['story_scores'] = story_feedback_scores(rows)
         for row in rows:
             article = row.get('news_items') or {}
             if row.get('action') == 'hide_publisher':
                 preferences['hidden_publishers'].add((article.get('source') or '').casefold().strip())
             elif row.get('action') == 'hide_topic':
                 preferences['hidden_categories'].add(str(article.get('category_id')))
-            elif row.get('action') in {'more_like_this', 'less_like_this'}:
-                preferences['story_scores'][str(row.get('story_id'))] = 18 if row['action'] == 'more_like_this' else -18
     except Exception:
         logger.info('Story personalization unavailable; using category preferences')
 
     for category in categories:
         if str(category.get('id')) in preferences['hidden_categories']:
             continue
-        stories = select_recent_news(category, preferences)
+        stories = select_recent_news(category, preferences, now=evaluation_time)
 
         if not stories:
             logger.info(

@@ -25,6 +25,41 @@ CLUSTER_SIMILARITY_THRESHOLD = 0.45
 MAX_STORIES_PER_PUBLISHER = 2
 
 
+def stable_category_rows(rows: list[dict]) -> list[dict]:
+    """Canonicalize category order independently of PostgREST row order."""
+    return sorted(
+        rows,
+        key=lambda selected: (
+            str((selected.get("categories") or {}).get("slug") or ""),
+            str(selected.get("category_id") or ""),
+        ),
+    )
+
+
+def stable_categories(categories: list[dict]) -> list[dict]:
+    """Canonicalize plain category records used by scheduled selection."""
+    return sorted(
+        categories,
+        key=lambda category: (
+            str(category.get("slug") or ""),
+            str(category.get("id") or ""),
+        ),
+    )
+
+
+def story_feedback_scores(rows: list[dict]) -> dict[str, int]:
+    """Aggregate opposing feedback independently of database row order."""
+    scores: dict[str, int] = {}
+    for row in rows:
+        story_id = str(row.get("story_id") or "")
+        action = row.get("action")
+        if not story_id or action not in {"more_like_this", "less_like_this"}:
+            continue
+        delta = 18 if action == "more_like_this" else -18
+        scores[story_id] = scores.get(story_id, 0) + delta
+    return scores
+
+
 def configured_story_limit():
     """Bound server configuration; invalid configuration fails before provider work."""
     value = int(os.getenv('BRIEFING_STORIES_PER_CATEGORY', '5'))
@@ -75,6 +110,7 @@ async def select_recent_stories(
     access_token: str,
     stories_per_category: int | None = None,
     hours: int = DEFAULT_HOURS,
+    now: datetime | None = None,
 ):
 
     print()
@@ -113,10 +149,7 @@ async def select_recent_stories(
         str((row.get('news_items') or {}).get('source') or '').casefold().strip()
         for row in feedback_rows if row.get('action') == 'hide_publisher'
     }
-    story_preferences = {
-        str(row.get('story_id')): 18 if row.get('action') == 'more_like_this' else -18
-        for row in feedback_rows if row.get('action') in {'more_like_this', 'less_like_this'}
-    }
+    story_preferences = story_feedback_scores(feedback_rows)
     profile_preferences = {}
     try:
         rows = (supabase.table('profiles').select('horoscope_sign,crypto_watchlist')
@@ -169,6 +202,7 @@ async def select_recent_stories(
         category_response.data
         or []
     )
+    selected_categories = stable_category_rows(selected_categories)
 
     print()
 
@@ -236,9 +270,10 @@ async def select_recent_stories(
     # 3. TIME WINDOW
     # ========================================================
 
-    now = datetime.now(
-        timezone.utc
-    )
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("Selection evaluation timestamp must include a timezone")
+    now = now.astimezone(timezone.utc)
 
     since = (
         now
@@ -372,6 +407,10 @@ async def select_recent_stories(
                 .order(
                     "published_at",
                     desc=True,
+                )
+                .order(
+                    "id",
+                    desc=False,
                 )
                 .limit(
                     MAX_DATABASE_ROWS
@@ -585,6 +624,7 @@ async def select_recent_stories(
                 validated_stories,
                 category_slug=category_slug,
                 limit=MAX_RANKING_CANDIDATES,
+                now=now,
             )
         )
 
